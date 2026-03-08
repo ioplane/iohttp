@@ -252,7 +252,6 @@ static int arm_close(io_server_t *srv, io_conn_t *conn)
 
     io_uring_prep_close(sqe, conn->fd);
     io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(conn->id, IO_OP_CLOSE));
-    conn->fd = -1;
     (void)io_conn_transition(conn, IO_CONN_CLOSING);
 
     return 0;
@@ -308,11 +307,16 @@ static int dispatch_request(io_server_t *srv, io_conn_t *conn, io_request_t *req
     }
 
     /* Serialize HTTP/1.1 response and arm send */
-    uint8_t resp_buf[65536];
+    uint8_t resp_buf[8192];
     int resp_len = io_http1_serialize_response(&resp, resp_buf,
                                                sizeof(resp_buf));
     if (resp_len > 0) {
-        (void)arm_send(srv, conn, resp_buf, (size_t)resp_len);
+        if (arm_send(srv, conn, resp_buf, (size_t)resp_len) < 0) {
+            io_ctx_destroy(&ctx);
+            io_response_destroy(&resp);
+            (void)arm_close(srv, conn);
+            return -EIO;
+        }
     }
 
     conn->keep_alive = req->keep_alive && (resp.status < 400);
@@ -553,9 +557,9 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                 conn->send_offset += (size_t)cqe->res;
                 if (conn->send_offset < conn->send_len) {
                     size_t remaining = conn->send_len - conn->send_offset;
-                    conn->send_active = true;
                     struct io_uring_sqe *send_sqe = io_uring_get_sqe(ring);
                     if (send_sqe != nullptr) {
+                        conn->send_active = true;
                         io_uring_prep_send(
                             send_sqe, conn->fd,
                             conn->send_buf + conn->send_offset,
@@ -563,6 +567,9 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                         io_uring_sqe_set_data64(
                             send_sqe,
                             IO_ENCODE_USERDATA(conn->id, IO_OP_SEND));
+                    } else {
+                        /* SQE exhaustion — close connection */
+                        (void)arm_close(srv, conn);
                     }
                 } else {
                     free(conn->send_buf);
@@ -582,6 +589,7 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
             uint32_t conn_id = (uint32_t)IO_DECODE_ID(ud);
             io_conn_t *conn = find_conn_by_id(srv, conn_id);
             if (conn != nullptr) {
+                conn->fd = -1;
                 io_conn_free(srv->pool, conn);
             }
         }
