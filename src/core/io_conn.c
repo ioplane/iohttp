@@ -100,6 +100,12 @@ void io_conn_pool_destroy(io_conn_pool_t *pool)
         return;
     }
 
+    /* Free per-connection buffers before releasing the pool */
+    for (uint32_t i = 0; i < pool->max_conns; i++) {
+        free(pool->conns[i].recv_buf);
+        free(pool->conns[i].send_buf);
+    }
+
     free(pool->conns);
     free(pool);
 }
@@ -151,15 +157,7 @@ void io_conn_free(io_conn_pool_t *pool, io_conn_t *conn)
     }
 
     free(conn->recv_buf);
-    conn->recv_buf = nullptr;
-    conn->recv_buf_size = 0;
-    conn->recv_len = 0;
     free(conn->send_buf);
-    conn->send_buf = nullptr;
-    conn->send_len = 0;
-    conn->send_offset = 0;
-    conn->send_active = false;
-    conn->keep_alive = false;
 
     memset(conn, 0, sizeof(*conn));
     conn->fd = -1;

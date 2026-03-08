@@ -314,7 +314,12 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                 if (conn != nullptr) {
                     conn->fd = client_fd;
                     (void)io_conn_transition(conn, IO_CONN_HTTP_ACTIVE);
-                    (void)arm_recv(srv, conn);
+                    int recv_err = arm_recv(srv, conn);
+                    if (recv_err < 0) {
+                        close(conn->fd);
+                        conn->fd = -1;
+                        io_conn_free(srv->pool, conn);
+                    }
                 } else {
                     /* Backpressure: pool full, close immediately */
                     close(client_fd);
