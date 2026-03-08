@@ -722,3 +722,13 @@ if(NGHTTP3_FOUND AND TARGET io_quic)
 else()
     message(STATUS "HTTP/3 disabled (nghttp3 or io_quic not available)")
 endif()
+
+# ============================================================================
+# Sprint 10: Alt-Svc header (HTTP/3 discovery)
+# ============================================================================
+
+add_library(io_alt_svc STATIC src/http/io_alt_svc.c)
+target_include_directories(io_alt_svc PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_alt_svc PUBLIC io_response)
+
+io_add_test(test_io_alt_svc tests/unit/test_io_alt_svc.c io_alt_svc io_response)
