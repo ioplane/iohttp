@@ -14,9 +14,6 @@
 #include "router/io_route_group.h"
 #include "router/io_router.h"
 
-/* Re-export for convenience: next-function signature */
-typedef int (*io_next_fn)(io_request_t *req, io_response_t *resp);
-
 constexpr uint32_t IO_MAX_GLOBAL_MIDDLEWARE = 32;
 
 /* ---- Router-level middleware registration ---- */
@@ -32,7 +29,7 @@ constexpr uint32_t IO_MAX_GLOBAL_MIDDLEWARE = 32;
 /* ---- Error and fallback handlers on router ---- */
 
 /** Error handler — called when handler or middleware returns non-zero. */
-typedef int (*io_error_handler_fn)(io_request_t *req, io_response_t *resp, int error);
+typedef int (*io_error_handler_fn)(io_ctx_t *c, int error);
 
 /**
  * @brief Set a custom error handler on the router.
@@ -101,8 +98,7 @@ typedef struct {
  * Execution order: global_mw[0..N] -> group_mw[0..M] -> handler.
  * Any middleware may short-circuit by returning without calling next.
  *
- * @param req          Request.
- * @param resp         Response.
+ * @param c            Request context.
  * @param global_mw    Global middleware array (may be nullptr if count is 0).
  * @param global_count Number of global middleware functions.
  * @param group_mw     Group middleware array (may be nullptr if count is 0).
@@ -110,7 +106,7 @@ typedef struct {
  * @param handler      Final route handler.
  * @return 0 on success, negative errno on error.
  */
-[[nodiscard]] int io_chain_execute(io_request_t *req, io_response_t *resp,
+[[nodiscard]] int io_chain_execute(io_ctx_t *c,
                                    io_middleware_fn *global_mw, uint32_t global_count,
                                    io_middleware_fn *group_mw, uint32_t group_count,
                                    io_handler_fn handler);

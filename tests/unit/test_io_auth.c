@@ -3,6 +3,7 @@
  * @brief Unit tests for auth middleware (Basic and Bearer).
  */
 
+#include "core/io_ctx.h"
 #include "middleware/io_auth.h"
 
 #include <string.h>
@@ -25,10 +26,9 @@ static const char *resp_header(const io_response_t *resp, const char *name)
 
 static bool next_called;
 
-static int dummy_next(io_request_t *req, io_response_t *resp)
+static int dummy_next(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     next_called = true;
     return 0;
 }
@@ -76,16 +76,20 @@ void test_auth_basic_valid(void)
     io_request_t req;
     io_request_init(&req);
     req.method = IO_METHOD_GET;
-    /* "admin:secret" → base64 "YWRtaW46c2VjcmV0" */
+    /* "admin:secret" -> base64 "YWRtaW46c2VjcmV0" */
     set_request_header(&req, "Authorization", "Basic YWRtaW46c2VjcmV0");
 
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -97,13 +101,16 @@ void test_auth_basic_invalid(void)
     io_request_t req;
     io_request_init(&req);
     req.method = IO_METHOD_GET;
-    /* "admin:wrong" → base64 "YWRtaW46d3Jvbmc=" */
+    /* "admin:wrong" -> base64 "YWRtaW46d3Jvbmc=" */
     set_request_header(&req, "Authorization", "Basic YWRtaW46d3Jvbmc=");
 
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(401, resp.status);
     TEST_ASSERT_FALSE(next_called);
@@ -111,6 +118,7 @@ void test_auth_basic_invalid(void)
     const char *www = resp_header(&resp, "WWW-Authenticate");
     TEST_ASSERT_NOT_NULL(www);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -127,7 +135,10 @@ void test_auth_basic_missing(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(401, resp.status);
     TEST_ASSERT_FALSE(next_called);
@@ -136,6 +147,7 @@ void test_auth_basic_missing(void)
     TEST_ASSERT_NOT_NULL(www);
     TEST_ASSERT_EQUAL_STRING("Basic realm=\"iohttp\"", www);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -152,10 +164,14 @@ void test_auth_bearer_valid(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -172,11 +188,15 @@ void test_auth_bearer_invalid(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(401, resp.status);
     TEST_ASSERT_FALSE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -192,7 +212,10 @@ void test_auth_bearer_missing(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(401, resp.status);
     TEST_ASSERT_FALSE(next_called);
@@ -201,6 +224,7 @@ void test_auth_bearer_missing(void)
     TEST_ASSERT_NOT_NULL(www);
     TEST_ASSERT_EQUAL_STRING("Bearer", www);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 

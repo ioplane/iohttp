@@ -3,6 +3,7 @@
  * @brief Unit tests for security headers middleware.
  */
 
+#include "core/io_ctx.h"
 #include "middleware/io_security.h"
 
 #include <string.h>
@@ -23,10 +24,9 @@ static const char *resp_header(const io_response_t *resp, const char *name)
     return nullptr;
 }
 
-static int dummy_next(io_request_t *req, io_response_t *resp)
+static int dummy_next(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 0;
 }
 
@@ -60,13 +60,17 @@ void test_security_csp_header(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *csp = resp_header(&resp, "Content-Security-Policy");
     TEST_ASSERT_NOT_NULL(csp);
     TEST_ASSERT_EQUAL_STRING("default-src 'self'", csp);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -90,13 +94,17 @@ void test_security_hsts_header(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *hsts = resp_header(&resp, "Strict-Transport-Security");
     TEST_ASSERT_NOT_NULL(hsts);
     TEST_ASSERT_EQUAL_STRING("max-age=31536000; includeSubDomains", hsts);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -119,13 +127,17 @@ void test_security_frame_options(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *fo = resp_header(&resp, "X-Frame-Options");
     TEST_ASSERT_NOT_NULL(fo);
     TEST_ASSERT_EQUAL_STRING("DENY", fo);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -148,13 +160,17 @@ void test_security_nosniff(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *ns = resp_header(&resp, "X-Content-Type-Options");
     TEST_ASSERT_NOT_NULL(ns);
     TEST_ASSERT_EQUAL_STRING("nosniff", ns);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -177,13 +193,17 @@ void test_security_referrer_policy(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *rp = resp_header(&resp, "Referrer-Policy");
     TEST_ASSERT_NOT_NULL(rp);
     TEST_ASSERT_EQUAL_STRING("no-referrer", rp);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -203,7 +223,10 @@ void test_security_all_headers(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     TEST_ASSERT_NOT_NULL(resp_header(&resp, "Content-Security-Policy"));
@@ -212,6 +235,7 @@ void test_security_all_headers(void)
     TEST_ASSERT_NOT_NULL(resp_header(&resp, "Referrer-Policy"));
     TEST_ASSERT_NOT_NULL(resp_header(&resp, "X-Content-Type-Options"));
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 

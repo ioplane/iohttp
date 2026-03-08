@@ -3,6 +3,7 @@
  * @brief Unit tests for CORS middleware.
  */
 
+#include "core/io_ctx.h"
 #include "middleware/io_cors.h"
 
 #include <string.h>
@@ -25,10 +26,9 @@ static const char *resp_header(const io_response_t *resp, const char *name)
 
 static bool next_called;
 
-static int dummy_next(io_request_t *req, io_response_t *resp)
+static int dummy_next(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     next_called = true;
     return 0;
 }
@@ -74,7 +74,10 @@ void test_cors_preflight_allowed(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(204, resp.status);
 
@@ -90,6 +93,7 @@ void test_cors_preflight_allowed(void)
 
     TEST_ASSERT_FALSE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -112,13 +116,17 @@ void test_cors_preflight_denied(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     /* no CORS headers set for denied origin */
     const char *acao = resp_header(&resp, "Access-Control-Allow-Origin");
     TEST_ASSERT_NULL(acao);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -141,7 +149,10 @@ void test_cors_simple_request_headers(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(next_called);
 
@@ -149,6 +160,7 @@ void test_cors_simple_request_headers(void)
     TEST_ASSERT_NOT_NULL(acao);
     TEST_ASSERT_EQUAL_STRING("https://example.com", acao);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -169,13 +181,17 @@ void test_cors_wildcard_origin(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *acao = resp_header(&resp, "Access-Control-Allow-Origin");
     TEST_ASSERT_NOT_NULL(acao);
     TEST_ASSERT_EQUAL_STRING("*", acao);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -199,7 +215,10 @@ void test_cors_credentials(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     /* credentials: echo origin, never "*" */
@@ -211,6 +230,7 @@ void test_cors_credentials(void)
     TEST_ASSERT_NOT_NULL(acac);
     TEST_ASSERT_EQUAL_STRING("true", acac);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -224,12 +244,16 @@ void test_cors_disabled(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = dummy_next(&req, &resp);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = dummy_next(&c);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     const char *acao = resp_header(&resp, "Access-Control-Allow-Origin");
     TEST_ASSERT_NULL(acao);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 

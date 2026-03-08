@@ -3,6 +3,7 @@
  * @brief Unit tests for middleware chain execution.
  */
 
+#include "core/io_ctx.h"
 #include "middleware/io_middleware.h"
 #include "router/io_route_group.h"
 #include "router/io_router.h"
@@ -35,87 +36,80 @@ void tearDown(void)
 
 /* ---- Stub middleware ---- */
 
-static int mw_a(io_request_t *req, io_response_t *resp,
-                int (*next)(io_request_t *, io_response_t *))
+static int mw_a(io_ctx_t *c, io_handler_fn next)
 {
+    (void)c;
     call_order[call_count++] = 'A';
-    return next(req, resp);
+    return next(c);
 }
 
-static int mw_b(io_request_t *req, io_response_t *resp,
-                int (*next)(io_request_t *, io_response_t *))
+static int mw_b(io_ctx_t *c, io_handler_fn next)
 {
+    (void)c;
     call_order[call_count++] = 'B';
-    return next(req, resp);
+    return next(c);
 }
 
-static int mw_c(io_request_t *req, io_response_t *resp,
-                int (*next)(io_request_t *, io_response_t *))
+static int mw_c(io_ctx_t *c, io_handler_fn next)
 {
+    (void)c;
     call_order[call_count++] = 'C';
-    return next(req, resp);
+    return next(c);
 }
 
-static int mw_d(io_request_t *req, io_response_t *resp,
-                int (*next)(io_request_t *, io_response_t *))
+static int mw_d(io_ctx_t *c, io_handler_fn next)
 {
+    (void)c;
     call_order[call_count++] = 'D';
-    return next(req, resp);
+    return next(c);
 }
 
-static int mw_block(io_request_t *req, io_response_t *resp,
-                    int (*next)(io_request_t *, io_response_t *))
+static int mw_block(io_ctx_t *c, io_handler_fn next)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     (void)next;
     call_order[call_count++] = 'X';
     return -EPERM; /* short-circuit: never calls next */
 }
 
 /** Middleware that adds an X-Before header before calling next */
-static int mw_add_req_header(io_request_t *req, io_response_t *resp,
-                             int (*next)(io_request_t *, io_response_t *))
+static int mw_add_req_header(io_ctx_t *c, io_handler_fn next)
 {
     /* Simulate adding a header to the request by setting content_type */
-    req->content_type = "application/json";
-    return next(req, resp);
+    c->req->content_type = "application/json";
+    return next(c);
 }
 
 /** Middleware that adds an X-After header after calling next */
-static int mw_add_resp_header(io_request_t *req, io_response_t *resp,
-                              int (*next)(io_request_t *, io_response_t *))
+static int mw_add_resp_header(io_ctx_t *c, io_handler_fn next)
 {
-    int rc = next(req, resp);
+    int rc = next(c);
     if (rc == 0) {
-        (void)io_response_set_header(resp, "X-After", "middleware");
+        (void)io_response_set_header(c->resp, "X-After", "middleware");
     }
     return rc;
 }
 
 /* ---- Stub handlers ---- */
 
-static int handler_ok(io_request_t *req, io_response_t *resp)
+static int handler_ok(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     call_order[call_count++] = 'H';
     return 0;
 }
 
-static int handler_error(io_request_t *req, io_response_t *resp)
+static int handler_error(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return -EIO;
 }
 
-static int handler_check_content_type(io_request_t *req, io_response_t *resp)
+static int handler_check_content_type(io_ctx_t *c)
 {
-    (void)resp;
     call_order[call_count++] = 'H';
     /* Verify middleware set content_type */
-    if (req->content_type && strcmp(req->content_type, "application/json") == 0) {
+    if (c->req->content_type && strcmp(c->req->content_type, "application/json") == 0) {
         call_order[call_count++] = '!'; /* success marker */
     }
     return 0;
@@ -124,10 +118,9 @@ static int handler_check_content_type(io_request_t *req, io_response_t *resp)
 static int error_handler_called;
 static int error_handler_code;
 
-static int test_error_handler(io_request_t *req, io_response_t *resp, int error)
+static int test_error_handler(io_ctx_t *c, int error)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     error_handler_called = 1;
     error_handler_code = error;
     return 0;
@@ -135,20 +128,18 @@ static int test_error_handler(io_request_t *req, io_response_t *resp, int error)
 
 static int custom_404_called;
 
-static int custom_404_handler(io_request_t *req, io_response_t *resp)
+static int custom_404_handler(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     custom_404_called = 1;
     return 0;
 }
 
 static int custom_405_called;
 
-static int custom_405_handler(io_request_t *req, io_response_t *resp)
+static int custom_405_handler(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     custom_405_called = 1;
     return 0;
 }
@@ -163,8 +154,11 @@ void test_middleware_chain_order(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     io_middleware_fn mws[] = {mw_a, mw_b};
-    int rc = io_chain_execute(&req, &resp, mws, 2, nullptr, 0, handler_ok);
+    int rc = io_chain_execute(&c, mws, 2, nullptr, 0, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(3, call_count);
@@ -172,6 +166,7 @@ void test_middleware_chain_order(void)
     TEST_ASSERT_EQUAL_INT('B', call_order[1]);
     TEST_ASSERT_EQUAL_INT('H', call_order[2]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -183,14 +178,18 @@ void test_middleware_short_circuit(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     io_middleware_fn mws[] = {mw_a, mw_block, mw_b};
-    int rc = io_chain_execute(&req, &resp, mws, 3, nullptr, 0, handler_ok);
+    int rc = io_chain_execute(&c, mws, 3, nullptr, 0, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(-EPERM, rc);
     TEST_ASSERT_EQUAL_INT(2, call_count); /* A, X — B and H never called */
     TEST_ASSERT_EQUAL_INT('A', call_order[0]);
     TEST_ASSERT_EQUAL_INT('X', call_order[1]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -202,14 +201,18 @@ void test_middleware_modify_request(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     io_middleware_fn mws[] = {mw_add_req_header};
-    int rc = io_chain_execute(&req, &resp, mws, 1, nullptr, 0, handler_check_content_type);
+    int rc = io_chain_execute(&c, mws, 1, nullptr, 0, handler_check_content_type);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(2, call_count); /* H, ! */
     TEST_ASSERT_EQUAL_INT('H', call_order[0]);
     TEST_ASSERT_EQUAL_INT('!', call_order[1]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -221,8 +224,11 @@ void test_middleware_modify_response(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     io_middleware_fn mws[] = {mw_add_resp_header};
-    int rc = io_chain_execute(&req, &resp, mws, 1, nullptr, 0, handler_ok);
+    int rc = io_chain_execute(&c, mws, 1, nullptr, 0, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
 
@@ -237,6 +243,7 @@ void test_middleware_modify_response(void)
     }
     TEST_ASSERT_TRUE(found);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -248,9 +255,12 @@ void test_middleware_per_group(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     /* Group middleware only */
     io_middleware_fn group_mws[] = {mw_c, mw_d};
-    int rc = io_chain_execute(&req, &resp, nullptr, 0, group_mws, 2, handler_ok);
+    int rc = io_chain_execute(&c, nullptr, 0, group_mws, 2, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(3, call_count);
@@ -258,6 +268,7 @@ void test_middleware_per_group(void)
     TEST_ASSERT_EQUAL_INT('D', call_order[1]);
     TEST_ASSERT_EQUAL_INT('H', call_order[2]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -269,12 +280,16 @@ void test_middleware_empty_chain(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = io_chain_execute(&req, &resp, nullptr, 0, nullptr, 0, handler_ok);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = io_chain_execute(&c, nullptr, 0, nullptr, 0, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(1, call_count);
     TEST_ASSERT_EQUAL_INT('H', call_order[0]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -293,19 +308,23 @@ void test_middleware_error_handler(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     /* Execute chain — handler returns error */
-    int rc = io_chain_execute(&req, &resp, nullptr, 0, nullptr, 0, handler_error);
+    int rc = io_chain_execute(&c, nullptr, 0, nullptr, 0, handler_error);
     TEST_ASSERT_EQUAL_INT(-EIO, rc);
 
     /* Simulate what the server loop would do: call the error handler */
     if (rc != 0 && eh) {
-        int erc = eh(&req, &resp, rc);
+        int erc = eh(&c, rc);
         TEST_ASSERT_EQUAL_INT(0, erc);
     }
 
     TEST_ASSERT_EQUAL_INT(1, error_handler_called);
     TEST_ASSERT_EQUAL_INT(-EIO, error_handler_code);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -323,15 +342,19 @@ void test_middleware_custom_404(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     /* Simulate dispatch miss */
     io_route_match_t match = io_router_dispatch(router, IO_METHOD_GET, "/nope", 5);
     TEST_ASSERT_EQUAL_INT(IO_MATCH_NOT_FOUND, match.status);
 
     /* Server loop would call the custom not-found handler */
-    int rc = nf(&req, &resp);
+    int rc = nf(&c);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(1, custom_404_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -352,15 +375,19 @@ void test_middleware_custom_405(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     /* Dispatch POST to a GET-only route */
     io_route_match_t match = io_router_dispatch(router, IO_METHOD_POST, "/resource", 9);
     TEST_ASSERT_EQUAL_INT(IO_MATCH_METHOD_NOT_ALLOWED, match.status);
 
     /* Server loop would call the custom 405 handler */
-    int rc = ma(&req, &resp);
+    int rc = ma(&c);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(1, custom_405_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -372,13 +399,16 @@ void test_middleware_global_plus_group(void)
     io_request_init(&req);
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     /* Global middleware: A, B */
     io_middleware_fn global_mws[] = {mw_a, mw_b};
 
     /* Group middleware: C, D */
     io_middleware_fn group_mws[] = {mw_c, mw_d};
 
-    int rc = io_chain_execute(&req, &resp, global_mws, 2, group_mws, 2, handler_ok);
+    int rc = io_chain_execute(&c, global_mws, 2, group_mws, 2, handler_ok);
 
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(5, call_count);
@@ -388,6 +418,7 @@ void test_middleware_global_plus_group(void)
     TEST_ASSERT_EQUAL_INT('D', call_order[3]);
     TEST_ASSERT_EQUAL_INT('H', call_order[4]);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 

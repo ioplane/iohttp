@@ -10,25 +10,26 @@
 
 /* Thread-local chain context for the "next" function */
 static _Thread_local io_chain_t *tl_chain;
+static _Thread_local io_ctx_t *tl_ctx;
 
-static int chain_next(io_request_t *req, io_response_t *resp)
+static int chain_next(io_ctx_t *c)
 {
     io_chain_t *chain = tl_chain;
 
     if (chain->current >= chain->count) {
         /* All middleware done — call final handler */
-        return chain->handler(req, resp);
+        return chain->handler(c);
     }
 
     io_middleware_fn mw = chain->middleware[chain->current++];
-    return mw(req, resp, chain_next);
+    return mw(c, chain_next);
 }
 
-int io_chain_execute(io_request_t *req, io_response_t *resp, io_middleware_fn *global_mw,
+int io_chain_execute(io_ctx_t *c, io_middleware_fn *global_mw,
                      uint32_t global_count, io_middleware_fn *group_mw, uint32_t group_count,
                      io_handler_fn handler)
 {
-    if (!req || !resp || !handler) {
+    if (!c || !handler) {
         return -EINVAL;
     }
 
@@ -60,10 +61,13 @@ int io_chain_execute(io_request_t *req, io_response_t *resp, io_middleware_fn *g
 
     /* Save previous chain context (supports nested execution) */
     io_chain_t *prev = tl_chain;
+    io_ctx_t *prev_ctx = tl_ctx;
     tl_chain = &chain;
+    tl_ctx = c;
 
-    int rc = chain_next(req, resp);
+    int rc = chain_next(c);
 
     tl_chain = prev;
+    tl_ctx = prev_ctx;
     return rc;
 }

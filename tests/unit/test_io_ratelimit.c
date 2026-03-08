@@ -3,6 +3,7 @@
  * @brief Unit tests for rate limiting middleware.
  */
 
+#include "core/io_ctx.h"
 #include "middleware/io_ratelimit.h"
 
 #include <string.h>
@@ -26,10 +27,9 @@ static const char *resp_header(const io_response_t *resp, const char *name)
 
 static bool next_called;
 
-static int dummy_next(io_request_t *req, io_response_t *resp)
+static int dummy_next(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     next_called = true;
     return 0;
 }
@@ -74,11 +74,15 @@ void test_ratelimit_under_limit(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(next_called);
     TEST_ASSERT_NOT_EQUAL(429, resp.status);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -102,10 +106,14 @@ void test_ratelimit_at_limit(void)
         io_response_t resp;
         TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-        int rc = mw(&req, &resp, dummy_next);
+        io_ctx_t c;
+        TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+        int rc = mw(&c, dummy_next);
         TEST_ASSERT_EQUAL_INT(0, rc);
         TEST_ASSERT_NOT_EQUAL(429, resp.status);
 
+        io_ctx_destroy(&c);
         io_response_destroy(&resp);
     }
 }
@@ -130,7 +138,11 @@ void test_ratelimit_over_limit_429(void)
         io_response_t resp;
         TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-        (void)mw(&req, &resp, dummy_next);
+        io_ctx_t c;
+        TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+        (void)mw(&c, dummy_next);
+        io_ctx_destroy(&c);
         io_response_destroy(&resp);
     }
 
@@ -144,7 +156,10 @@ void test_ratelimit_over_limit_429(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
-    int rc = mw(&req, &resp, dummy_next);
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(429, resp.status);
     TEST_ASSERT_FALSE(next_called);
@@ -152,6 +167,7 @@ void test_ratelimit_over_limit_429(void)
     const char *retry = resp_header(&resp, "Retry-After");
     TEST_ASSERT_NOT_NULL(retry);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -175,11 +191,15 @@ void test_ratelimit_burst(void)
         io_response_t resp;
         TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+        io_ctx_t c;
+        TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
         next_called = false;
-        int rc = mw(&req, &resp, dummy_next);
+        int rc = mw(&c, dummy_next);
         TEST_ASSERT_EQUAL_INT(0, rc);
         TEST_ASSERT_TRUE(next_called);
 
+        io_ctx_destroy(&c);
         io_response_destroy(&resp);
     }
 
@@ -192,12 +212,16 @@ void test_ratelimit_burst(void)
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     next_called = false;
-    int rc = mw(&req, &resp, dummy_next);
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT16(429, resp.status);
     TEST_ASSERT_FALSE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 
@@ -219,7 +243,11 @@ void test_ratelimit_refill(void)
 
     io_response_t resp;
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
-    (void)mw(&req, &resp, dummy_next);
+
+    io_ctx_t c;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+    (void)mw(&c, dummy_next);
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 
     /* wait for refill (2ms should give 2 tokens at 1000/s) */
@@ -233,11 +261,14 @@ void test_ratelimit_refill(void)
 
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
 
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&c, &req, &resp, nullptr));
+
     next_called = false;
-    int rc = mw(&req, &resp, dummy_next);
+    int rc = mw(&c, dummy_next);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(next_called);
 
+    io_ctx_destroy(&c);
     io_response_destroy(&resp);
 }
 

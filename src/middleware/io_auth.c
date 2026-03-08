@@ -74,15 +74,14 @@ static int b64_decode(const char *src, size_t src_len, char *out, size_t out_siz
     return (int)j;
 }
 
-static int basic_middleware(io_request_t *req, io_response_t *resp,
-                            int (*next)(io_request_t *, io_response_t *))
+static int basic_middleware(io_ctx_t *c, io_handler_fn next)
 {
     io_auth_state_t *st = tl_basic_state;
-    const char *auth = io_request_header(req, "Authorization");
+    const char *auth = io_request_header(c->req, "Authorization");
 
     if (auth == nullptr || strncmp(auth, "Basic ", 6) != 0) {
-        resp->status = 401;
-        (void)io_response_set_header(resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
+        c->resp->status = 401;
+        (void)io_response_set_header(c->resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
         return 0;
     }
 
@@ -92,41 +91,40 @@ static int basic_middleware(io_request_t *req, io_response_t *resp,
 
     int dec_len = b64_decode(encoded, enc_len, decoded, sizeof(decoded));
     if (dec_len < 0) {
-        resp->status = 401;
-        (void)io_response_set_header(resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
+        c->resp->status = 401;
+        (void)io_response_set_header(c->resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
         return 0;
     }
 
     if (!st->verify(decoded, st->ctx)) {
-        resp->status = 401;
-        (void)io_response_set_header(resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
+        c->resp->status = 401;
+        (void)io_response_set_header(c->resp, "WWW-Authenticate", "Basic realm=\"iohttp\"");
         return 0;
     }
 
-    return next(req, resp);
+    return next(c);
 }
 
-static int bearer_middleware(io_request_t *req, io_response_t *resp,
-                             int (*next)(io_request_t *, io_response_t *))
+static int bearer_middleware(io_ctx_t *c, io_handler_fn next)
 {
     io_auth_state_t *st = tl_bearer_state;
-    const char *auth = io_request_header(req, "Authorization");
+    const char *auth = io_request_header(c->req, "Authorization");
 
     if (auth == nullptr || strncmp(auth, "Bearer ", 7) != 0) {
-        resp->status = 401;
-        (void)io_response_set_header(resp, "WWW-Authenticate", "Bearer");
+        c->resp->status = 401;
+        (void)io_response_set_header(c->resp, "WWW-Authenticate", "Bearer");
         return 0;
     }
 
     const char *token = auth + 7;
 
     if (!st->verify(token, st->ctx)) {
-        resp->status = 401;
-        (void)io_response_set_header(resp, "WWW-Authenticate", "Bearer");
+        c->resp->status = 401;
+        (void)io_response_set_header(c->resp, "WWW-Authenticate", "Bearer");
         return 0;
     }
 
-    return next(req, resp);
+    return next(c);
 }
 
 io_middleware_fn io_auth_basic_create(io_auth_verify_fn verify, void *ctx)

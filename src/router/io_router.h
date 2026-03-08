@@ -9,12 +9,13 @@
 #ifndef IOHTTP_ROUTER_ROUTER_H
 #define IOHTTP_ROUTER_ROUTER_H
 
+#include "core/io_ctx.h"
 #include "http/io_request.h"
 #include "http/io_response.h"
 #include "router/io_radix.h"
 
 /* Handler function -- returns 0 on success, negative errno on error */
-typedef int (*io_handler_fn)(io_request_t *req, io_response_t *resp);
+typedef int (*io_handler_fn)(io_ctx_t *c);
 
 /* Route options -- extensible metadata per-route */
 typedef struct {

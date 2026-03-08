@@ -28,38 +28,33 @@ void tearDown(void)
 
 /* ---- Stub handlers (unique addresses for identification) ---- */
 
-static int handler_a(io_request_t *req, io_response_t *resp)
+static int handler_a(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 0;
 }
 
-static int handler_b(io_request_t *req, io_response_t *resp)
+static int handler_b(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 1;
 }
 
-static int handler_c(io_request_t *req, io_response_t *resp)
+static int handler_c(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 2;
 }
 
-static int handler_d(io_request_t *req, io_response_t *resp)
+static int handler_d(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 3;
 }
 
-static int handler_e(io_request_t *req, io_response_t *resp)
+static int handler_e(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 4;
 }
 

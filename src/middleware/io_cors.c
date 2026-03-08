@@ -44,31 +44,30 @@ static int set_origin_header(io_response_t *resp, const io_cors_config_t *cfg, c
     return 0;
 }
 
-static int cors_middleware(io_request_t *req, io_response_t *resp,
-                           int (*next)(io_request_t *, io_response_t *))
+static int cors_middleware(io_ctx_t *c, io_handler_fn next)
 {
     io_cors_config_t *cfg = tl_cors_cfg;
-    const char *origin = io_request_header(req, "Origin");
+    const char *origin = io_request_header(c->req, "Origin");
 
     /* no Origin header — not a CORS request, pass through */
     if (origin == nullptr) {
-        return next(req, resp);
+        return next(c);
     }
 
     if (!origin_allowed(cfg, origin)) {
         /* origin not allowed — don't set CORS headers */
-        if (req->method == IO_METHOD_OPTIONS) {
-            resp->status = 204;
+        if (c->req->method == IO_METHOD_OPTIONS) {
+            c->resp->status = 204;
             return 0;
         }
-        return next(req, resp);
+        return next(c);
     }
 
-    if (req->method == IO_METHOD_OPTIONS) {
+    if (c->req->method == IO_METHOD_OPTIONS) {
         /* preflight request */
-        resp->status = 204;
+        c->resp->status = 204;
 
-        int rc = set_origin_header(resp, cfg, origin);
+        int rc = set_origin_header(c->resp, cfg, origin);
         if (rc != 0) {
             return rc;
         }
@@ -84,9 +83,9 @@ static int cors_middleware(io_request_t *req, io_response_t *resp,
                 off +=
                     (size_t)snprintf(buf + off, sizeof(buf) - off, "%s", cfg->allowed_methods[i]);
             }
-            rc = io_response_set_header(resp, "Access-Control-Allow-Methods", buf);
+            rc = io_response_set_header(c->resp, "Access-Control-Allow-Methods", buf);
         } else {
-            rc = io_response_set_header(resp, "Access-Control-Allow-Methods", DEFAULT_METHODS);
+            rc = io_response_set_header(c->resp, "Access-Control-Allow-Methods", DEFAULT_METHODS);
         }
         if (rc != 0) {
             return rc;
@@ -103,9 +102,9 @@ static int cors_middleware(io_request_t *req, io_response_t *resp,
                 off +=
                     (size_t)snprintf(buf + off, sizeof(buf) - off, "%s", cfg->allowed_headers[i]);
             }
-            rc = io_response_set_header(resp, "Access-Control-Allow-Headers", buf);
+            rc = io_response_set_header(c->resp, "Access-Control-Allow-Headers", buf);
         } else {
-            rc = io_response_set_header(resp, "Access-Control-Allow-Headers", DEFAULT_HEADERS);
+            rc = io_response_set_header(c->resp, "Access-Control-Allow-Headers", DEFAULT_HEADERS);
         }
         if (rc != 0) {
             return rc;
@@ -114,13 +113,13 @@ static int cors_middleware(io_request_t *req, io_response_t *resp,
         /* max-age */
         char age_buf[32];
         snprintf(age_buf, sizeof(age_buf), "%u", cfg->max_age_seconds);
-        rc = io_response_set_header(resp, "Access-Control-Max-Age", age_buf);
+        rc = io_response_set_header(c->resp, "Access-Control-Max-Age", age_buf);
         if (rc != 0) {
             return rc;
         }
 
         if (cfg->allow_credentials) {
-            rc = io_response_set_header(resp, "Access-Control-Allow-Credentials", "true");
+            rc = io_response_set_header(c->resp, "Access-Control-Allow-Credentials", "true");
             if (rc != 0) {
                 return rc;
             }
@@ -130,12 +129,12 @@ static int cors_middleware(io_request_t *req, io_response_t *resp,
     }
 
     /* simple/actual request */
-    int rc = next(req, resp);
+    int rc = next(c);
     if (rc != 0) {
         return rc;
     }
 
-    return set_origin_header(resp, cfg, origin);
+    return set_origin_header(c->resp, cfg, origin);
 }
 
 void io_cors_config_init(io_cors_config_t *cfg)

@@ -20,17 +20,15 @@ void tearDown(void)
 
 /* ---- Stub handlers with distinct return values for identity checks ---- */
 
-static int handler_a(io_request_t *req, io_response_t *resp)
+static int handler_a(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 0;
 }
 
-static int handler_b(io_request_t *req, io_response_t *resp)
+static int handler_b(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 1;
 }
 

@@ -15,11 +15,9 @@
 #include "router/io_router.h"
 
 /**
- * Middleware function type. Full chain execution is in Sprint 4.6 --
- * for now, groups just store middleware pointers.
+ * Middleware function type -- wraps handler with pre/post processing.
  */
-typedef int (*io_middleware_fn)(io_request_t *req, io_response_t *resp,
-                                int (*next)(io_request_t *, io_response_t *));
+typedef int (*io_middleware_fn)(io_ctx_t *c, io_handler_fn next);
 
 constexpr uint32_t IO_MAX_GROUP_MIDDLEWARE = 16;
 constexpr uint32_t IO_MAX_GROUP_PREFIX = 256;

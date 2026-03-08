@@ -27,43 +27,36 @@ void tearDown(void)
 
 /* ---- Stub handlers ---- */
 
-static int handler_users(io_request_t *req, io_response_t *resp)
+static int handler_users(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 0;
 }
 
-static int handler_posts(io_request_t *req, io_response_t *resp)
+static int handler_posts(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 1;
 }
 
-static int handler_admin(io_request_t *req, io_response_t *resp)
+static int handler_admin(io_ctx_t *c)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     return 2;
 }
 
 /* ---- Stub middleware ---- */
 
-static int stub_mw_a(io_request_t *req, io_response_t *resp,
-                     int (*next)(io_request_t *, io_response_t *))
+static int stub_mw_a(io_ctx_t *c, io_handler_fn next)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     (void)next;
     return 0;
 }
 
-static int stub_mw_b(io_request_t *req, io_response_t *resp,
-                     int (*next)(io_request_t *, io_response_t *))
+static int stub_mw_b(io_ctx_t *c, io_handler_fn next)
 {
-    (void)req;
-    (void)resp;
+    (void)c;
     (void)next;
     return 0;
 }

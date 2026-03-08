@@ -98,22 +98,21 @@ bool io_ratelimit_check(const char *key)
     return false;
 }
 
-static int ratelimit_middleware(io_request_t *req, io_response_t *resp,
-                                int (*next)(io_request_t *, io_response_t *))
+static int ratelimit_middleware(io_ctx_t *c, io_handler_fn next)
 {
     /* use Host header as key, fallback to "default" */
-    const char *key = io_request_header(req, "Host");
+    const char *key = io_request_header(c->req, "Host");
     if (key == nullptr) {
         key = "default";
     }
 
     if (!io_ratelimit_check(key)) {
-        resp->status = 429;
-        (void)io_response_set_header(resp, "Retry-After", "1");
+        c->resp->status = 429;
+        (void)io_response_set_header(c->resp, "Retry-After", "1");
         return 0;
     }
 
-    return next(req, resp);
+    return next(c);
 }
 
 void io_ratelimit_config_init(io_ratelimit_config_t *cfg)
