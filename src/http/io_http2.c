@@ -59,6 +59,8 @@ static char *arena_copy(h2_arena_t *a, const char *src, size_t len)
 
 /* ---- Per-stream data ---- */
 
+typedef struct h2_resp_data h2_resp_data_t;
+
 typedef struct {
     io_request_t request;
     h2_arena_t arena;       /* owns all string copies for header names/values/path/etc */
@@ -67,6 +69,7 @@ typedef struct {
     size_t body_len;
     int32_t stream_id;
     bool headers_done;      /* HEADERS frame fully received */
+    h2_resp_data_t *resp_data; /* response data provider — freed with stream */
 } h2_stream_data_t;
 
 /* ---- Session (opaque) ---- */
@@ -111,6 +114,7 @@ static void stream_data_free(h2_stream_data_t *sd)
     if (sd == nullptr) {
         return;
     }
+    free(sd->resp_data);
     free(sd->arena.buf);
     free(sd->body_buf);
     free(sd);
@@ -124,7 +128,7 @@ static io_method_t parse_method(const char *method, size_t len)
 static int output_buf_append(io_http2_session_t *session, const uint8_t *data, size_t len)
 {
     if (session->out_len + len > session->out_cap) {
-        size_t new_cap = session->out_cap * 2;
+        size_t new_cap = (session->out_cap == 0) ? H2_OUTPUT_BUF_SIZE : session->out_cap * 2;
         while (new_cap < session->out_len + len) {
             new_cap *= 2;
         }
@@ -142,11 +146,11 @@ static int output_buf_append(io_http2_session_t *session, const uint8_t *data, s
 
 /* ---- Response data provider callback ---- */
 
-typedef struct {
+struct h2_resp_data {
     const uint8_t *body;
     size_t body_len;
     size_t offset;
-} h2_resp_data_t;
+};
 
 static nghttp2_ssize resp_data_read_cb(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
                                         size_t length, uint32_t *data_flags,
@@ -211,7 +215,7 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
     }
 
     for (uint32_t i = 0; i < resp->header_count; i++) {
-        lc_names[i] = malloc(resp->headers[i].name_len);
+        lc_names[i] = malloc(resp->headers[i].name_len + 1);
         if (lc_names[i] == nullptr) {
             for (uint32_t j = 0; j < i; j++) {
                 free(lc_names[j]);
@@ -224,6 +228,7 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
             char ch = resp->headers[i].name[c];
             lc_names[i][c] = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch;
         }
+        lc_names[i][resp->headers[i].name_len] = '\0';
 
         nva[1 + i] = (nghttp2_nv){
             .name = (uint8_t *)lc_names[i],
@@ -254,8 +259,14 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
         rv = nghttp2_submit_response2(session->ng_session, stream_id, nva, nva_count, &data_prd);
         if (rv != 0) {
             free(rd);
+        } else {
+            /* Store rd in stream data so it is freed when the stream closes */
+            h2_stream_data_t *sd =
+                nghttp2_session_get_stream_user_data(session->ng_session, stream_id);
+            if (sd != nullptr) {
+                sd->resp_data = rd;
+            }
         }
-        /* rd is freed in on_stream_close */
     } else {
         rv = nghttp2_submit_response2(session->ng_session, stream_id, nva, nva_count, nullptr);
     }
@@ -356,6 +367,9 @@ static int on_header_cb(nghttp2_session *session, const nghttp2_frame *frame, co
         } else if (namelen == 14 && memcmp(name, "content-length", 14) == 0) {
             req->content_length = 0;
             for (size_t i = 0; i < valuelen; i++) {
+                if (value[i] < '0' || value[i] > '9') {
+                    return NGHTTP2_ERR_CALLBACK_FAILURE;
+                }
                 req->content_length = req->content_length * 10 + (size_t)(value[i] - '0');
             }
         }
@@ -600,7 +614,9 @@ int io_http2_goaway(io_http2_session_t *session)
     /* Two-phase GOAWAY per RFC 9113 §5.1.1:
      * First: GOAWAY with last_stream_id = 2^31-1 (accept no more)
      * After draining: GOAWAY with real last_stream_id */
-    int32_t last_id = session->goaway_sent ? 0 : (int32_t)((1U << 31) - 1);
+    int32_t last_id = session->goaway_sent
+                          ? (int32_t)nghttp2_session_get_last_proc_stream_id(session->ng_session)
+                          : (int32_t)((1U << 31) - 1);
 
     int rv = nghttp2_submit_goaway(session->ng_session, NGHTTP2_FLAG_NONE, last_id,
                                    NGHTTP2_NO_ERROR, nullptr, 0);

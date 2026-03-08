@@ -78,9 +78,6 @@ pkg_check_modules(WOLFSSL REQUIRED wolfssl>=5.8)
 # picohttpparser (bundled — header-only + one .c file)
 # Will be added as source in src/http/
 
-# nghttp2 (HTTP/2)
-pkg_check_modules(NGHTTP2 nghttp2)
-
 # ngtcp2 (QUIC transport)
 pkg_check_modules(NGTCP2 libngtcp2)
 pkg_check_modules(NGTCP2_WOLFSSL libngtcp2_crypto_wolfssl)
@@ -216,9 +213,9 @@ endmacro()
 # Sprint 3: HTTP/1.1 parser (picohttpparser)
 # Sprint 4: Router and middleware
 # Sprint 5: Static files and WebSocket
-# Sprint 6: HTTP/2 (nghttp2)
-# Sprint 7: HTTP/3 (ngtcp2 + nghttp3)
-# Sprint 8: Polish, benchmarks, packaging
+# Sprint 7: HTTP/2 (nghttp2)
+# Sprint 8: HTTP/3 (ngtcp2 + nghttp3)
+# Sprint 9: Polish, benchmarks, packaging
 
 # ============================================================================
 # Sprint 1: Core io_uring event loop
