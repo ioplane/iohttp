@@ -416,3 +416,28 @@ target_include_directories(io_middleware PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(io_middleware PUBLIC io_router io_route_group io_request io_response)
 
 io_add_test(test_io_middleware tests/unit/test_io_middleware.c io_middleware io_router io_route_group io_radix io_request io_response)
+
+# ============================================================================
+# Sprint 4: Built-in middleware modules
+# ============================================================================
+
+add_library(io_cors STATIC src/middleware/io_cors.c)
+target_include_directories(io_cors PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_cors PUBLIC io_request io_response)
+
+add_library(io_ratelimit STATIC src/middleware/io_ratelimit.c)
+target_include_directories(io_ratelimit PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_ratelimit PUBLIC io_request io_response)
+
+add_library(io_security STATIC src/middleware/io_security.c)
+target_include_directories(io_security PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_security PUBLIC io_request io_response)
+
+add_library(io_auth STATIC src/middleware/io_auth.c)
+target_include_directories(io_auth PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_auth PUBLIC io_request io_response)
+
+io_add_test(test_io_cors tests/unit/test_io_cors.c io_cors io_request io_response)
+io_add_test(test_io_ratelimit tests/unit/test_io_ratelimit.c io_ratelimit io_request io_response)
+io_add_test(test_io_security tests/unit/test_io_security.c io_security io_request io_response)
+io_add_test(test_io_auth tests/unit/test_io_auth.c io_auth io_request io_response)
