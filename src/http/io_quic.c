@@ -252,10 +252,10 @@ io_quic_conn_t *io_quic_conn_create(const io_quic_config_t *cfg, const io_quic_c
 
     io_quic_conn_t *qconn = calloc(1, sizeof(*qconn));
     if (qconn == nullptr) {
-        return nullptr;
+        return nullptr; //-V773
     }
 
-    qconn->config = *cfg;
+    qconn->config = *cfg; //-V522
     qconn->callbacks = *cbs;
     qconn->user_data = user_data;
 
@@ -412,7 +412,7 @@ int io_quic_flush(io_quic_conn_t *conn, const uint8_t **out_data, size_t *out_le
             size_t new_cap = conn->out_cap * 2;
             uint8_t *new_buf = realloc(conn->out_buf, new_cap);
             if (new_buf == nullptr) {
-                return -ENOMEM;
+                return -ENOMEM; //-V773
             }
             conn->out_buf = new_buf;
             conn->out_cap = new_cap;
@@ -479,7 +479,7 @@ ssize_t io_quic_write_stream(io_quic_conn_t *conn, int64_t stream_id, const uint
         size_t new_cap = conn->out_cap * 2;
         uint8_t *new_buf = realloc(conn->out_buf, new_cap);
         if (new_buf == nullptr) {
-            return -ENOMEM;
+            return -ENOMEM; //-V773
         }
         conn->out_buf = new_buf;
         conn->out_cap = new_cap;
@@ -601,7 +601,7 @@ int io_quic_close(io_quic_conn_t *conn, uint64_t error_code)
         size_t new_cap = conn->out_cap * 2;
         uint8_t *new_buf = realloc(conn->out_buf, new_cap);
         if (new_buf == nullptr) {
-            return -ENOMEM;
+            return -ENOMEM; //-V773
         }
         conn->out_buf = new_buf;
         conn->out_cap = new_cap;

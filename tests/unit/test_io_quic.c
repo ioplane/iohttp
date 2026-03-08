@@ -225,8 +225,8 @@ void test_quic_get_timeout_not_max_after_create(void)
 {
     io_quic_config_t cfg = test_server_config();
     io_quic_callbacks_t cbs = {0};
-    uint8_t dcid[8] = {1};
-    uint8_t scid[8] = {2};
+    uint8_t dcid[8] = {1}; //-V1009
+    uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
@@ -247,8 +247,8 @@ void test_quic_close_sets_closed(void)
 {
     io_quic_config_t cfg = test_server_config();
     io_quic_callbacks_t cbs = {0};
-    uint8_t dcid[8] = {1};
-    uint8_t scid[8] = {2};
+    uint8_t dcid[8] = {1}; //-V1009
+    uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 

@@ -94,8 +94,8 @@ void test_http3_session_on_quic_conn(void)
     qcfg.cert_file = TEST_SERVER_CERT;
     qcfg.key_file = TEST_SERVER_KEY;
     io_quic_callbacks_t cbs = {0};
-    uint8_t dcid[8] = {1};
-    uint8_t scid[8] = {2};
+    uint8_t dcid[8] = {1}; //-V1009
+    uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
@@ -147,8 +147,8 @@ void test_quic_conn_destroy_after_close(void)
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     io_quic_callbacks_t cbs = {0};
-    uint8_t dcid[8] = {1};
-    uint8_t scid[8] = {2};
+    uint8_t dcid[8] = {1}; //-V1009
+    uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 

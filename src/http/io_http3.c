@@ -42,7 +42,7 @@ static char *arena_copy(h3_arena_t *a, const char *src, size_t len)
         }
         char *new_buf = realloc(a->buf, new_cap);
         if (new_buf == nullptr) {
-            return nullptr;
+            return nullptr; //-V773
         }
         a->buf = new_buf;
         a->cap = new_cap;
@@ -84,9 +84,9 @@ static h3_stream_data_t *stream_data_new(int64_t stream_id)
 {
     h3_stream_data_t *sd = calloc(1, sizeof(*sd));
     if (sd == nullptr) {
-        return nullptr;
+        return nullptr; //-V773
     }
-    io_request_init(&sd->request);
+    io_request_init(&sd->request); //-V522
     sd->stream_id = stream_id;
     sd->request.http_version_major = 3;
     sd->request.http_version_minor = 0;
@@ -123,7 +123,7 @@ static int h3_begin_headers_cb(nghttp3_conn *conn, int64_t stream_id, void *conn
 
     h3_stream_data_t *sd = stream_data_new(stream_id);
     if (sd == nullptr) {
-        return NGHTTP3_ERR_CALLBACK_FAILURE;
+        return NGHTTP3_ERR_CALLBACK_FAILURE; //-V773
     }
 
     int rv = nghttp3_conn_set_stream_user_data(conn, stream_id, sd);
@@ -253,7 +253,7 @@ static int h3_recv_data_cb(nghttp3_conn *conn, int64_t stream_id, const uint8_t 
         }
         uint8_t *new_buf = realloc(sd->body_buf, new_cap);
         if (new_buf == nullptr) {
-            return NGHTTP3_ERR_CALLBACK_FAILURE;
+            return NGHTTP3_ERR_CALLBACK_FAILURE; //-V773
         }
         sd->body_buf = new_buf;
         sd->body_cap = new_cap;
@@ -350,25 +350,8 @@ static nghttp3_ssize resp_data_read_cb(nghttp3_conn *conn, int64_t stream_id, ng
         return 0;
     }
 
-    h3_stream_data_t *sd = stream_user_data;
-    if (sd == nullptr) {
-        *pflags |= NGHTTP3_DATA_FLAG_EOF;
-        return 0;
-    }
-
-    /* The resp_data is stored as the arena's last allocation -- but we need
-     * a different approach. We use conn_user_data to find the session and
-     * then the stream. For simplicity, we store the response body pointer
-     * in a static-duration way. Actually, nghttp3 provides the stream_user_data
-     * which is our h3_stream_data_t. But the response data is separate.
-     *
-     * The nghttp3 data reader callback returns vec pointers -- it uses
-     * zero-copy by pointing into existing buffers. We cannot use this
-     * approach easily without storing response data somewhere accessible.
-     *
-     * For now, signal EOF (no body via this path). The response headers
-     * are already submitted. Body handling in HTTP/3 requires more
-     * integration with the QUIC layer. */
+    /* Placeholder: signal EOF. Full body streaming requires deeper
+     * integration with the QUIC layer (future sprint). */
     *pflags |= NGHTTP3_DATA_FLAG_EOF;
     return 0;
 }
@@ -396,12 +379,12 @@ io_http3_session_t *io_http3_session_create(const io_http3_config_t *cfg, io_qui
 
     io_http3_session_t *session = calloc(1, sizeof(*session));
     if (session == nullptr) {
-        return nullptr;
+        return nullptr; //-V773
     }
 
     /* Apply config with defaults */
     if (cfg != nullptr) {
-        session->config = *cfg;
+        session->config = *cfg; //-V522
     } else {
         io_http3_config_init(&session->config);
     }
@@ -537,11 +520,11 @@ int io_http3_submit_response(io_http3_session_t *session, int64_t stream_id,
     size_t nva_count = 1 + resp->header_count;
     nghttp3_nv *nva = calloc(nva_count, sizeof(*nva));
     if (nva == nullptr) {
-        return -ENOMEM;
+        return -ENOMEM; //-V773
     }
 
     /* :status */
-    nva[0] = (nghttp3_nv){
+    nva[0] = (nghttp3_nv){ //-V522
         .name = (uint8_t *)":status",
         .namelen = 7,
         .value = (uint8_t *)status_str,
@@ -556,7 +539,7 @@ int io_http3_submit_response(io_http3_session_t *session, int64_t stream_id,
         lc_names = calloc(resp->header_count, sizeof(*lc_names));
         if (lc_names == nullptr) {
             free(nva);
-            return -ENOMEM;
+            return -ENOMEM; //-V773
         }
     }
 
@@ -572,7 +555,7 @@ int io_http3_submit_response(io_http3_session_t *session, int64_t stream_id,
         }
         for (size_t c = 0; c < resp->headers[i].name_len; c++) {
             char ch = resp->headers[i].name[c];
-            lc_names[i][c] = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch;
+            lc_names[i][c] = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch; //-V522
         }
         lc_names[i][resp->headers[i].name_len] = '\0';
 
