@@ -19,7 +19,7 @@ However, H2O does offer libh2o as an embeddable library.
 | **HTTP/1.1** | picohttpparser | custom | custom | custom | picohttpparser | custom | custom | custom | custom |
 | **HTTP/2** | nghttp2 | -- | experimental | -- | custom | -- | -- | nghttp2 | -- |
 | **HTTP/3** | ngtcp2+nghttp3 | -- | -- | -- | quicly | -- | -- | -- | -- |
-| **WebSocket** | RFC 6455 | yes | yes | yes (0.9.74+) | yes | yes | yes | yes | yes |
+| **WebSocket** | wslay (RFC 6455) | yes | yes | yes (0.9.74+) | yes | yes | yes | yes | yes |
 | **SSE** | yes | manual | yes | -- | -- | -- | -- | -- | -- |
 | **I/O model** | io_uring | select/poll/epoll | threads | select/poll/epoll | epoll (io_uring partial) | epoll | epoll | epoll/iocp/kqueue | epoll/kqueue |
 | **TLS** | wolfSSL native | 5 backends | OpenSSL | GnuTLS | OpenSSL (libcrypto) | OpenSSL | mbedTLS | OpenSSL | OpenSSL |
@@ -37,8 +37,8 @@ However, H2O does offer libh2o as an embeddable library.
 | **Cross-platform** | Linux 6.7+ | all | all | all | Linux | Linux | Linux | all | Unix |
 | **ACME/LE** | -- | -- | -- | -- | -- | -- | -- | -- | yes |
 | **Sandboxing** | -- | -- | -- | -- | -- | -- | -- | -- | seccomp+pledge |
-| **Maturity** | alpha | stable | stable | stable | stable | restructuring | stable | stable | stable |
-| **Own LOC** | ~14-23K | ~25-30K | ~30K | ~25K | ~80-120K | ~15-25K | ~20K | ~20K | ~15K |
+| **Maturity** | alpha (S1–S7) | stable | stable | stable | stable | restructuring | stable | stable | stable |
+| **Own LOC** | ~10K (S7), ~15-18K projected | ~25-30K | ~30K | ~25K | ~80-120K | ~15-25K | ~20K | ~20K | ~15K |
 
 ---
 
@@ -206,8 +206,9 @@ All corrections from earlier drafts have been applied to the text above.
 
 ## Protocol Library Stack (iohttp's Approach)
 
-All protocol libraries are MIT-licensed, I/O-agnostic (callback-based), and written
-or maintained by the same community (Tatsuhiro Tsujikawa and contributors).
+All protocol libraries are MIT-licensed and I/O-agnostic (callback-based). Most are
+written or maintained by the same community (Tatsuhiro Tsujikawa and contributors):
+nghttp2, ngtcp2, nghttp3, wslay, sfparse.
 
 | Library | Function | LOC | License | wolfSSL Support |
 |---------|----------|-----|---------|-----------------|
@@ -215,6 +216,8 @@ or maintained by the same community (Tatsuhiro Tsujikawa and contributors).
 | nghttp2 | HTTP/2 frames + HPACK | ~18K | MIT | Via ALPN |
 | ngtcp2 | QUIC transport | ~28K | MIT | **First-class** (ngtcp2_crypto_wolfssl) |
 | nghttp3 | HTTP/3 + QPACK | ~12K | MIT | N/A |
+| [wslay](https://github.com/tatsuhiro-t/wslay) | WebSocket (RFC 6455) | ~3K | MIT | N/A |
+| [sfparse](https://github.com/ngtcp2/sfparse) | Structured Fields (RFC 9651) | ~1K | MIT | N/A |
 | liburing | io_uring wrappers | ~3K | LGPL+MIT | N/A |
 | yyjson | JSON (2.4 GB/s) | ~8K | MIT | N/A |
 | wolfSSL | TLS 1.3, QUIC crypto | — | GPLv2+ | — |
@@ -223,6 +226,11 @@ or maintained by the same community (Tatsuhiro Tsujikawa and contributors).
 via `libngtcp2_crypto_wolfssl` (added by Stefan Eissing, August 2022, used by curl
 for HTTP/3). Verified: quiche (BoringSSL only), MsQuic (Schannel/OpenSSL), lsquic
 (BoringSSL), picoquic (picotls), Quinn (rustls), quic-go (Go crypto/tls), mvfst (Fizz).
+
+**Ecosystem coherence:** Five of the protocol libraries (nghttp2, ngtcp2, nghttp3,
+wslay, sfparse) share a common author (Tatsuhiro Tsujikawa), consistent API style
+(callback-based, I/O-agnostic), and the same MIT license. This reduces integration
+friction and ensures consistent behavior across the protocol stack.
 
 **wolfSSL license note:** The license column shows GPLv2+ but this needs verification.
 GitHub LICENSING says GPLv2, wolfssl.com says GPLv3, the manual says GPLv2. If strictly
@@ -235,7 +243,7 @@ acquire commercial license before release.
 
 | Metric | iohttp (target) | Mongoose | H2O | nginx |
 |--------|-----------------|----------|-----|-------|
-| HTTP/1.1 parsing | ~4+ GB/s (SSE4.2) | ~1 GB/s | ~4+ GB/s | ~1.5 GB/s |
+| HTTP/1.1 parsing | ~4+ GB/s (SSE4.2, picohttpparser) | ~1 GB/s | ~4+ GB/s | ~1.5 GB/s |
 | I/O model | io_uring (zero-syscall) | select/epoll | epoll | epoll |
 | JSON serialization | ~2.4 GB/s (yyjson) | ~200 MB/s | N/A | N/A |
 | Zero-copy send | SEND_ZC (6.0+) | N/A | N/A | sendfile |
@@ -254,7 +262,7 @@ acquire commercial license before release.
    but built around it: multishot accept, provided buffers, zero-copy send, linked timeouts,
    ring restrictions, multi-reactor ring-per-thread
 4. **Single TLS stack** — wolfSSL for HTTPS, QUIC, and mTLS (no OpenSSL dependency)
-5. **Smallest own code** for full protocol coverage (~14-24K vs 80-120K for H2O)
+5. **Smallest own code** for full protocol coverage (~15-18K projected vs 80-120K for H2O)
 6. **Modern C23** — nullptr, constexpr, [[nodiscard]], type-safe enums, `<stdckdint.h>`
 7. **Production features** — SPA, CORS, rate limiting, Slowloris defense, lock-free
    Prometheus metrics, PROXY protocol v1+v2, HTTP/2 Rapid Reset protection

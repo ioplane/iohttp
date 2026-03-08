@@ -63,7 +63,7 @@ graph TB
 
 - **io_uring native** — multishot accept, provided buffers, zero-copy send, SQPOLL mode
 - **wolfSSL integration** — TLS 1.3, mTLS, QUIC crypto, session resumption, FIPS-ready
-- **HTTP/1.1** — picohttpparser (SSE4.2 SIMD, ~2.5 GB/s), keep-alive, chunked TE
+- **HTTP/1.1** — picohttpparser (SSE4.2 SIMD, ~4+ GB/s), keep-alive, chunked TE
 - **HTTP/2** — nghttp2 (HPACK, multiplexed streams, server push)
 - **HTTP/3** — ngtcp2 + nghttp3 (QUIC, 0-RTT, connection migration)
 - **Router** — longest-prefix match, path parameters, per-route auth/permissions
@@ -83,8 +83,10 @@ graph TB
 | HTTP/1.1 parser | [picohttpparser](https://github.com/h2o/picohttpparser) | MIT | ~800 |
 | HTTP/2 frames | [nghttp2](https://github.com/nghttp2/nghttp2) | MIT | ~18K |
 | QUIC transport | [ngtcp2](https://github.com/ngtcp2/ngtcp2) | MIT | ~28K |
-| HTTP/3 + QPACK | [nghttp3](https://github.com/nickel-org/nghttp3) | MIT | ~12K |
-| TLS 1.3 + QUIC | [wolfSSL](https://github.com/wolfSSL/wolfssl) | GPLv2+ | — |
+| HTTP/3 + QPACK | [nghttp3](https://github.com/ngtcp2/nghttp3) | MIT | ~12K |
+| WebSocket | [wslay](https://github.com/tatsuhiro-t/wslay) | MIT | ~3K |
+| Structured Fields | [sfparse](https://github.com/ngtcp2/sfparse) | MIT | ~1K |
+| TLS 1.3 + QUIC | [wolfSSL](https://github.com/wolfSSL/wolfssl) | GPLv2+* | — |
 | Async I/O | [liburing](https://github.com/axboe/liburing) | MIT/LGPL | ~3K |
 | JSON | [yyjson](https://github.com/ibireme/yyjson) | MIT | ~8K |
 
@@ -92,15 +94,8 @@ graph TB
 
 | # | Document | Description |
 |---|----------|-------------|
-| 01 | [Architecture](docs/en/01-architecture.md) | Core design, event loop, process model |
-| 02 | [HTTP Protocols](docs/en/02-http-protocols.md) | HTTP/1.1, HTTP/2, HTTP/3 integration |
-| 03 | [TLS Integration](docs/en/03-tls-integration.md) | wolfSSL, mTLS, QUIC crypto, kTLS |
-| 04 | [Router & Middleware](docs/en/04-router-middleware.md) | Routing, auth, rate limiting, CORS |
-| 05 | [Static Files](docs/en/05-static-files.md) | Embedding, caching, SPA fallback |
-| 06 | [WebSocket & SSE](docs/en/06-websocket-sse.md) | Real-time protocols |
-| 07 | [API Reference](docs/en/07-api-reference.md) | Public C API |
-| 08 | [Development](docs/en/08-development.md) | Build, test, contribute |
-| 09 | [Benchmarks](docs/en/09-benchmarks.md) | Performance vs Mongoose, nginx, h2o |
+| 01 | [Architecture](docs/en/01-architecture.md) | Core design, event loop, module decomposition |
+| 02 | [Comparison](docs/en/02-comparison.md) | Feature matrix vs Mongoose, H2O, libmicrohttpd, etc. |
 
 ## Example
 
@@ -132,15 +127,16 @@ int main(void)
 
 ## Build Requirements
 
-- Linux kernel 6.7+ (io_uring features)
+- Linux kernel 6.7+ (io_uring features, CVE-2024-0582 avoidance)
 - glibc 2.39+
-- Clang 22+ or GCC 15+
-- CMake 3.25+
+- Clang 22+ or GCC 15+ (C23 support)
+- CMake 4.0+
 - liburing 2.7+
-- wolfSSL 5.8+
+- wolfSSL 5.8.4+ (--enable-quic)
+- nghttp2, ngtcp2, nghttp3 (HTTP/2 + HTTP/3)
 
 ## License
 
 GPLv3 — see [LICENSE](LICENSE).
 
-wolfSSL dependency requires GPL-compatible license.
+wolfSSL dependency requires GPL-compatible license. See [wolfSSL license note](docs/en/02-comparison.md#protocol-library-stack-iohttps-approach).

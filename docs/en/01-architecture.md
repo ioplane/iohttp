@@ -50,15 +50,12 @@ implementation.
 The foundation: io_uring event loop driving all I/O. Single-reactor (dev mode) or
 multi-reactor ring-per-thread (production mode).
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_loop.{h,c}` | 800-1200 | io_uring ring setup, SQE submission, CQE reaping, timer wheel |
-| `io_worker.{h,c}` | 400-600 | Worker thread, per-worker ring + connection pool |
-| `io_server.{h,c}` | 300-500 | Server lifecycle: create, configure, run, shutdown |
-| `io_buffer.{h,c}` | 200-400 | Provided buffer ring management, buffer pool |
-| `io_conn.{h,c}` | 400-600 | Connection state machine, timeout tracking |
-| `io_timeout.{h,c}` | 200-300 | Linked timeout management |
-| `io_fdreg.{h,c}` | 150-250 | Registered files/buffers management |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_loop.{h,c}` | ~500 | io_uring ring setup, SQE submission, CQE reaping, timer wheel |
+| `io_server.{h,c}` | ~350 | Server lifecycle: create, configure, run, shutdown |
+| `io_buffer.{h,c}` | ~250 | Provided buffer ring management, buffer pool |
+| `io_conn.{h,c}` | ~260 | Connection state machine, timeout tracking |
 
 **Key io_uring features used:**
 - `IORING_OP_ACCEPT` with `IORING_ACCEPT_MULTISHOT` — one SQE accepts all connections
@@ -124,10 +121,10 @@ ACCEPTING → PROXY_HEADER → TLS_HANDSHAKE → PROTOCOL_NEGOTIATION
 
 wolfSSL native API integration (NOT OpenSSL compatibility layer).
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_tls.{h,c}` | 500-800 | wolfSSL context, custom I/O callbacks for io_uring |
-| `io_tls_quic.{h,c}` | 200-300 | QUIC crypto via ngtcp2_crypto_wolfssl |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_tls.{h,c}` | ~460 | wolfSSL context, custom I/O callbacks for io_uring |
+| `io_tls_quic.{h,c}` | planned | QUIC crypto via ngtcp2_crypto_wolfssl |
 
 **I/O callback pattern for io_uring:**
 ```c
@@ -172,14 +169,15 @@ any public release of iohttp.
 
 Three protocol implementations sharing a unified request/response abstraction.
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_http1.{h,c}` | 400-700 | picohttpparser wrapper, request object, chunked TE |
-| `io_http2.{h,c}` | 1500-2500 | nghttp2 session, stream mux, HPACK, flow control |
-| `io_http3.{h,c}` | 3000-5000 | ngtcp2 QUIC transport + nghttp3 HTTP/3 + QPACK + CID demux |
-| `io_request.{h,c}` | 300-500 | Unified request abstraction across protocols |
-| `io_response.{h,c}` | 300-500 | Response builder, header serialization |
-| `io_proxy_proto.{h,c}` | 300-500 | PROXY protocol v1/v2 decoder |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_http1.{h,c}` | ~540 | picohttpparser wrapper, request object, chunked TE |
+| `io_http2.{h,c}` | ~770 | nghttp2 session, stream mux, HPACK, flow control |
+| `io_http3.{h,c}` | planned | ngtcp2 QUIC transport + nghttp3 HTTP/3 + QPACK + CID demux |
+| `io_request.{h,c}` | ~350 | Unified request abstraction across protocols |
+| `io_response.{h,c}` | ~330 | Response builder, header serialization |
+| `io_multipart.{h,c}` | ~360 | Multipart form-data parsing (RFC 2046) |
+| `io_proxy_proto.{h,c}` | ~370 | PROXY protocol v1/v2 decoder |
 
 **Unified request flow:**
 ```
@@ -221,13 +219,13 @@ io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring sen
 
 ### 4. Router (`src/router/`)
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_radix.{h,c}` | 400-600 | Radix trie (compressed prefix tree), internal |
-| `io_router.{h,c}` | 500-700 | Per-method trees, auto-405/HEAD, path correction |
-| `io_route_group.{h,c}` | 200-400 | Nested groups with prefix composition |
-| `io_route_inspect.{h,c}` | 100-200 | Route walking, introspection, liboas binding |
-| `io_middleware.{h,c}` | 300-500 | Middleware chain, error handler, next() pattern |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_radix.{h,c}` | ~530 | Radix trie (compressed prefix tree), internal |
+| `io_router.{h,c}` | ~530 | Per-method trees, auto-405/HEAD, path correction |
+| `io_route_group.{h,c}` | ~310 | Nested groups with prefix composition |
+| `io_route_inspect.{h,c}` | ~130 | Route walking, introspection, liboas binding |
+| `io_middleware.{h,c}` | ~190 | Middleware chain, error handler, next() pattern |
 
 **Design heritage:** Radix trie + per-method trees (httprouter), static > param > wildcard
 priority (httprouter/echo/bunrouter), handler-returns-error (bunrouter/echo), route groups
@@ -253,14 +251,14 @@ route introspection (gorilla/mux), metadata attachment for OpenAPI (FastAPI).
 
 ### 5. Middleware (`src/middleware/`)
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_cors.{h,c}` | 100-200 | CORS preflight + headers |
-| `io_ratelimit.{h,c}` | 200-400 | Token bucket per IP |
-| `io_auth.{h,c}` | 200-400 | Basic, Bearer, JWT hooks |
-| `io_security.{h,c}` | 150-300 | CSP, HSTS, X-Frame-Options, nosniff |
-| `io_logging.{h,c}` | 300-500 | Structured JSON access/error logs |
-| `io_metrics.{h,c}` | 300-500 | Lock-free thread-local Prometheus metrics |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_cors.{h,c}` | ~100 | CORS preflight + headers |
+| `io_ratelimit.{h,c}` | ~200 | Token bucket per IP |
+| `io_auth.{h,c}` | ~170 | Basic, Bearer, JWT hooks |
+| `io_security.{h,c}` | ~220 | CSP, HSTS, X-Frame-Options, nosniff |
+| `io_logging.{h,c}` | planned | Structured JSON access/error logs |
+| `io_metrics.{h,c}` | planned | Lock-free thread-local Prometheus metrics |
 
 **Metrics architecture (lock-free):** Each worker thread maintains a thread-local metrics
 registry aligned to 64-byte cache line boundaries. No atomic operations in the request
@@ -282,28 +280,28 @@ buffer pools, connection limits).
 
 ### 6. Static Files (`src/static/`)
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_static.{h,c}` | 500-800 | File serving, MIME, ETag, Range, sendfile |
-| `io_spa.{h,c}` | 150-300 | SPA fallback, API prefix exclusion |
-| `io_compress.{h,c}` | 400-700 | gzip/brotli streaming + precompressed .gz/.br |
-| `io_embed.{h,c}` | 200-400 | C23 #embed for bundled assets |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_static.{h,c}` | ~380 | File serving, MIME, ETag, Range, sendfile |
+| `io_spa.{h,c}` | ~180 | SPA fallback, API prefix exclusion |
+| `io_compress.{h,c}` | ~380 | gzip/brotli streaming + precompressed .gz/.br |
+| `io_embed.{h,c}` | planned | C23 #embed for bundled assets |
 
 ### 7. WebSocket & SSE (`src/ws/`)
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_websocket.{h,c}` | 800-1500 | RFC 6455, frame parse, mask, ping/pong, fragmentation |
-| `io_sse.{h,c}` | 150-250 | SSE format, heartbeat, Last-Event-ID |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_websocket.{h,c}` | ~330 | RFC 6455 via wslay, frame parse, mask, ping/pong, fragmentation |
+| `io_sse.{h,c}` | ~260 | SSE format, heartbeat, Last-Event-ID |
 
 ### 8. liboas Integration (`src/middleware/io_oas.c`)
 
 liboas is a **separate project** — an OpenAPI 3.2.0 library for C23. iohttp provides
 integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 
-| Component | Est. LOC | Description |
-|-----------|----------|-------------|
-| `io_oas.{h,c}` | 200-400 | liboas adapter middleware, mount/publish helpers |
+| Component | LOC | Description |
+|-----------|-----|-------------|
+| `io_oas.{h,c}` | planned | liboas adapter middleware, mount/publish helpers |
 
 **Integration architecture (one route lookup):**
 1. At startup, liboas compiles OpenAPI document → `oas_compiled_api_t`
@@ -440,17 +438,23 @@ a threshold (e.g., 100 RSTs/second), terminate the connection.
 
 ## LOC Summary
 
-| Category | Own Code | External Libraries |
-|----------|----------|--------------------|
-| I/O Engine + Workers | 2450-3850 | liburing ~3K |
-| TLS Integration | 700-1100 | wolfSSL (large) |
-| HTTP/1.1 | 400-700 | picohttpparser ~800 |
-| HTTP/2 | 1500-2500 | nghttp2 ~18K |
-| HTTP/3 + QUIC | 3000-5000 | ngtcp2 ~28K + nghttp3 ~12K |
-| Router + Middleware | 2500-4200 | — |
-| liboas Adapter | 200-400 | liboas (separate project) |
-| Static Files + SPA | 1250-2200 | zlib, brotli |
-| WebSocket + SSE | 950-1750 | — |
-| Config + Logging + Metrics | 1000-1700 | yyjson ~8K |
-| **Total own code** | **~14K-24K** | |
-| **Total with deps** | | **~70K+** |
+As of Sprint 7 (HTTP/2 done). Source + headers, excluding vendored picohttpparser.
+
+| Category | Own Code | Status | External Libraries |
+|----------|----------|--------|--------------------|
+| I/O Engine (core) | ~1360 | done | liburing ~3K |
+| TLS Integration | ~460 | done | wolfSSL (large) |
+| HTTP/1.1 | ~540 | done | picohttpparser ~800 |
+| HTTP/2 | ~770 | done | nghttp2 ~18K |
+| HTTP/3 + QUIC | planned | — | ngtcp2 ~28K + nghttp3 ~12K |
+| Router | ~1500 | done | — |
+| Middleware | ~690 | done | — |
+| Static Files + SPA | ~940 | done | zlib, brotli |
+| WebSocket + SSE | ~590 | done | wslay ~3K |
+| Multipart + PROXY | ~730 | done | — |
+| JSON API + Logging + Metrics | planned | — | yyjson ~8K |
+| liboas Adapter | planned | — | liboas (separate project) |
+| Headers (.h) | ~2410 | — | — |
+| **Total own code** | **~9990** | S1-S7 | |
+| **Tests** | **~9940** | 29 tests | |
+| **Projected total** | **~15-18K** | all sprints | **~70K+** |
