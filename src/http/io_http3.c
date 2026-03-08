@@ -524,13 +524,13 @@ int io_http3_submit_response(io_http3_session_t *session, int64_t stream_id,
     }
 
     /* :status */
-    nva[0] = (nghttp3_nv){ //-V522
+    nva[0] = (nghttp3_nv){
         .name = (uint8_t *)":status",
         .namelen = 7,
         .value = (uint8_t *)status_str,
         .valuelen = (size_t)slen,
         .flags = NGHTTP3_NV_FLAG_NO_COPY_NAME,
-    };
+    }; //-V522
 
     /* Copy response headers — HTTP/3 requires lowercase header names.
      * We lowercase in-place in a temporary buffer. */
