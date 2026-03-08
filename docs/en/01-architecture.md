@@ -58,11 +58,17 @@ The foundation: a single-threaded io_uring event loop driving all I/O.
 
 **Key io_uring features used:**
 - `IORING_OP_ACCEPT` with `IORING_ACCEPT_MULTISHOT` — one SQE accepts all connections
+- `IOSQE_CQE_SKIP_SUCCESS` — suppress CQE on successful multishot accept (reduces CQ pressure)
 - `IORING_OP_RECV` with provided buffer rings — kernel picks buffer from pool
 - `IORING_OP_SEND_ZC` — zero-copy send for responses > 3KB (kernel 6.0+)
-- `IORING_OP_TIMEOUT` — timer management without timerfd
+- `IORING_OP_LINK_TIMEOUT` — linked timeouts for keepalive/header/body deadlines
 - `IORING_OP_SPLICE` / `IORING_OP_SENDFILE` — zero-copy static file serving
-- `IORING_SETUP_SQPOLL` — optional kernel-side polling for sustained load
+- `IORING_REGISTER_BUFFERS` — pinned memory for DMA acceleration on recv/send
+- `IORING_REGISTER_FILES` — registered file descriptors, skip fd table lookup per I/O
+- `io_uring_setup_buf_ring` — provided buffer ring for automatic recv buffer allocation
+- `IORING_SETUP_SQPOLL` — optional kernel-side SQ polling thread (requires CAP_SYS_ADMIN)
+
+**No epoll fallback.** io_uring is mandatory. Minimum kernel: 6.7+.
 
 **Connection state machine:**
 ```
@@ -85,6 +91,9 @@ wolfSSL native API integration (NOT OpenSSL compatibility layer).
 // wolfSSL reads from application-managed cipher buffer
 // io_uring recv → cipher_buf → wolfSSL_read() → plaintext → HTTP parser
 // HTTP response → wolfSSL_write() → cipher_buf → io_uring send
+//
+// CRITICAL: wolfSSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE)
+// io_uring is non-blocking — must handle WANT_READ/WANT_WRITE manually
 ```
 
 **Supported features:**
@@ -213,10 +222,13 @@ io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring sen
 ## Memory Model
 
 - **Fixed-size connection pool** — compile-time configurable (default 256)
-- **Provided buffer rings** — kernel-managed buffer pool for recv
+- **Provided buffer rings** — kernel-managed buffer pool for recv (no alloc in hot path)
+- **Registered buffers** — `IORING_REGISTER_BUFFERS` pins memory for DMA, avoids page table walks
+- **Registered files** — `IORING_REGISTER_FILES` pre-registers fds, skips fd table lookup
 - **Arena allocators** — per-request lifetime, freed after response sent
-- **Zero-copy paths** — sendfile for static files, io_uring zero-copy send for large responses
+- **Zero-copy paths** — splice for static files, `SEND_ZC` for large responses
 - **`[[nodiscard]]`** — on all allocation functions
+- **`static_assert`** — compile-time struct size checks (e.g., `sizeof(io_conn_t) <= 512`)
 - **No uncontrolled heap growth** — all buffers bounded, oversized requests rejected
 
 ---

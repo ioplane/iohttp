@@ -36,28 +36,48 @@ ctest --preset clang-debug
 - `io_loop_destroy(io_loop_t *loop)` — cleanup
 - `io_loop_run(io_loop_t *loop)` — main event loop (blocks)
 - `io_loop_stop(io_loop_t *loop)` — signal stop via eventfd
-- `io_loop_add_timer(loop, ms, callback, data)` — timer via IORING_OP_TIMEOUT
+- `io_loop_add_timer(loop, ms, callback, data)` — timer via `IORING_OP_TIMEOUT`
+- `io_loop_add_linked_timeout(loop, sqe, ms)` — linked timeout via `IORING_OP_LINK_TIMEOUT`
 - `io_loop_cancel_timer(loop, timer_id)` — cancel pending timer
+- `io_loop_register_buffers(loop, iovecs, count)` — `IORING_REGISTER_BUFFERS` for pinned DMA memory
+- `io_loop_register_files(loop, fds, count)` — `IORING_REGISTER_FILES` to skip fd table lookup
 
 ```c
 typedef struct {
-    uint32_t queue_depth;      /* default 256 */
-    uint32_t buf_ring_size;    /* default 128 */
-    uint32_t buf_size;         /* default 4096 */
-    bool     sqpoll;           /* SQPOLL mode */
+    uint32_t queue_depth;        /* default 256 */
+    uint32_t buf_ring_size;      /* default 128 */
+    uint32_t buf_size;           /* default 4096 */
+    uint32_t registered_bufs;    /* number of registered buffers (0 = disabled) */
+    uint32_t registered_files;   /* max registered fds (0 = disabled) */
+    bool     sqpoll;             /* SQPOLL mode (requires CAP_SYS_ADMIN) */
 } io_loop_config_t;
 ```
 
-**Tests (8):**
+**io_uring features per operation:**
+- Multishot accept: `IORING_OP_ACCEPT` + `IORING_ACCEPT_MULTISHOT` + `IOSQE_CQE_SKIP_SUCCESS`
+- Recv: `IORING_OP_RECV` with provided buffer ring (`io_uring_setup_buf_ring`)
+- Send: `IORING_OP_SEND_ZC` for zero-copy (payloads > 3KB), regular `IORING_OP_SEND` otherwise
+- Timers: `IORING_OP_LINK_TIMEOUT` for per-operation deadlines (keepalive, header, body)
+- Files: `IORING_OP_SPLICE` for zero-copy static file serving
+- Registered buffers: `IORING_REGISTER_BUFFERS` — pinned memory, avoids page table walks on DMA
+- Registered files: `IORING_REGISTER_FILES` — pre-registered fds, skips fd table lookup per I/O
+
+**No epoll fallback.** io_uring is mandatory. Minimum kernel: 6.7+.
+
+**Tests (12):**
 ```c
-void test_loop_config_defaults(void);         // queue_depth=256
-void test_loop_create_destroy(void);          // lifecycle
-void test_loop_nop_submit(void);              // submit NOP, verify completion
-void test_loop_timer_fires(void);             // 10ms timer fires
-void test_loop_timer_cancel(void);            // cancel before fire
-void test_loop_stop_via_eventfd(void);        // stop from another context
-void test_loop_provided_buffer_ring(void);    // buffer ring setup
-void test_loop_config_validate(void);         // invalid config rejected
+void test_loop_config_defaults(void);            // queue_depth=256
+void test_loop_create_destroy(void);             // lifecycle
+void test_loop_nop_submit(void);                 // submit NOP, verify completion
+void test_loop_timer_fires(void);                // 10ms timer fires
+void test_loop_timer_cancel(void);               // cancel before fire
+void test_loop_linked_timeout(void);             // IORING_OP_LINK_TIMEOUT fires on stall
+void test_loop_linked_timeout_no_fire(void);     // linked timeout cancelled on success
+void test_loop_stop_via_eventfd(void);           // stop from another context
+void test_loop_provided_buffer_ring(void);       // buffer ring setup
+void test_loop_register_buffers(void);           // IORING_REGISTER_BUFFERS + fixed read/write
+void test_loop_register_files(void);             // IORING_REGISTER_FILES + fixed fd I/O
+void test_loop_config_validate(void);            // invalid config rejected
 ```
 
 **CMake:**
@@ -178,7 +198,7 @@ void test_server_accept_connection(void);             // socketpair test
 
 ---
 
-### Task 1.4: Buffer Pool
+### Task 1.4: Buffer Pool & Registered Resources
 
 **Files:**
 - Create: `src/core/io_buffer.h`
@@ -188,30 +208,46 @@ void test_server_accept_connection(void);             // socketpair test
 
 **Implementation:**
 
-Manages provided buffer ring for io_uring:
+Manages three io_uring buffer mechanisms:
+
+1. **Provided buffer ring** (`io_uring_setup_buf_ring`) — kernel picks buffer for recv automatically, zero alloc in hot path
+2. **Registered buffers** (`IORING_REGISTER_BUFFERS`) — pinned memory for DMA, avoids page table walks
+3. **Registered files** (`IORING_REGISTER_FILES`) — pre-registered fds, skips fd table lookup per I/O op
 
 ```c
 typedef struct {
-    uint32_t ring_size;    /* number of buffers */
-    uint32_t buf_size;     /* size of each buffer */
-    uint16_t bgid;         /* buffer group ID */
+    uint32_t ring_size;       /* provided buffer ring: number of buffers (default 128) */
+    uint32_t buf_size;        /* size of each buffer (default 4096) */
+    uint16_t bgid;            /* buffer group ID */
+    uint32_t reg_buf_count;   /* registered buffers count (0 = disabled) */
+    uint32_t reg_buf_size;    /* registered buffer size (default 16384, TLS record) */
+    uint32_t reg_file_count;  /* registered file slots (0 = disabled, default = max_connections) */
 } io_bufpool_config_t;
 
 [[nodiscard]] io_bufpool_t *io_bufpool_create(const io_bufpool_config_t *cfg);
 void io_bufpool_destroy(io_bufpool_t *pool);
-[[nodiscard]] int io_bufpool_register(io_bufpool_t *pool, struct io_uring *ring);
+[[nodiscard]] int io_bufpool_register_ring(io_bufpool_t *pool, struct io_uring *ring);
+[[nodiscard]] int io_bufpool_register_bufs(io_bufpool_t *pool, struct io_uring *ring);
+[[nodiscard]] int io_bufpool_register_files(io_bufpool_t *pool, struct io_uring *ring);
 void io_bufpool_return(io_bufpool_t *pool, uint32_t buf_id);
 uint8_t *io_bufpool_get_buf(io_bufpool_t *pool, uint32_t buf_id);
+uint8_t *io_bufpool_get_reg_buf(io_bufpool_t *pool, uint32_t idx);
+[[nodiscard]] int io_bufpool_register_fd(io_bufpool_t *pool, int fd);
+void io_bufpool_unregister_fd(io_bufpool_t *pool, int fd);
 ```
 
-**Tests (6):**
+**Tests (10):**
 ```c
 void test_bufpool_create_destroy(void);
 void test_bufpool_config_defaults(void);
 void test_bufpool_get_buf_valid_id(void);
-void test_bufpool_get_buf_invalid_id(void);     // returns nullptr
+void test_bufpool_get_buf_invalid_id(void);      // returns nullptr
 void test_bufpool_return_and_reuse(void);
 void test_bufpool_config_validate(void);
+void test_bufpool_register_bufs(void);            // IORING_REGISTER_BUFFERS pinned memory
+void test_bufpool_register_files(void);           // IORING_REGISTER_FILES fd slots
+void test_bufpool_register_fd_and_use(void);      // register fd → fixed file I/O
+void test_bufpool_unregister_fd(void);            // unregister → slot freed
 ```
 
 ---
@@ -254,6 +290,9 @@ Custom I/O callbacks integrate with io_uring:
 - `wolfSSL_CTX_SetIORecv()` → reads from connection's cipher buffer
 - `wolfSSL_CTX_SetIOSend()` → writes to connection's send buffer
 - Buffers are drained/filled by io_uring recv/send operations
+- **CRITICAL:** `wolfSSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE)` — io_uring is non-blocking, wolfSSL must handle partial writes
+- Manual `WANT_READ`/`WANT_WRITE` handling — re-arm io_uring recv/send on these returns
+- Use registered buffers for TLS record I/O (16KB input + 16KB output per connection)
 
 **Tests (10):**
 ```c
@@ -1232,7 +1271,7 @@ void test_metrics_ready_endpoint(void);
 
 | Sprint | Focus | New Tests |
 |--------|-------|-----------|
-| 1 | io_uring + Server Skeleton | 29 |
+| 1 | io_uring + Server Skeleton | 37 |
 | 2 | wolfSSL TLS Integration | 15 |
 | 3 | HTTP/1.1 + PROXY Protocol | 40 |
 | 4 | Router + Middleware | 42 |
@@ -1242,7 +1281,7 @@ void test_metrics_ready_endpoint(void);
 | 8 | HTTP/3 (ngtcp2 + nghttp3) | 21 |
 | 9 | JSON + Logging + Metrics | 20 |
 | 10 | Fuzz + Bench + Docs | 5 fuzz targets |
-| **Total** | | **~229 tests + 5 fuzz targets** |
+| **Total** | | **~237 tests + 5 fuzz targets** |
 
 ## Timeline
 
