@@ -244,6 +244,92 @@ Track per-worker:
 - Multishot re-arms
 - ENOBUFS events
 
+## CRITICAL: Error Handling
+
+`cqe->res < 0` is `-errno`. io_uring does NOT use global `errno`.
+
+| Error | Meaning | Action |
+|-------|---------|--------|
+| `-ECANCELED` | Operation cancelled (timeout or explicit) | Cleanup, don't retry |
+| `-ETIME` | Linked timeout expired | Close idle connection |
+| `-EPIPE` | Peer reset / write to closed socket | Close connection |
+| `-ENOBUFS` | Provided buffer pool exhausted | Backpressure, retry later |
+| `-EAGAIN` | Transient | Retry with POLL_FIRST |
+| `res == 0` on recv | Peer closed (EOF) | Graceful close |
+| `0 < res < requested` | Short read/write | Handle partial I/O |
+
+**Every CQE must be handled.** Ignoring errors = silent data loss or leaks.
+
+## CRITICAL: fd Close Ordering
+
+```
+1. Cancel all pending ops on fd  (IORING_OP_ASYNC_CANCEL)
+2. Wait for ALL CQE (including -ECANCELED)
+3. Close fd  (IORING_OP_CLOSE or close())
+4. Free connection structures
+```
+
+**WRONG:** close fd while ops are in-flight = kernel use-after-free.
+Track in-flight op count per connection. Only close when count reaches 0.
+
+## CRITICAL: Send Serialization
+
+**ONE active send per TCP connection.** Kernel may reorder concurrent sends.
+
+Per-connection send queue with bounded depth. Activate next send only after CQE.
+For ordered multi-buffer sends: `IOSQE_IO_LINK` chains.
+
+## Memory Domains
+
+| Domain | Lifetime | Examples |
+|--------|----------|----------|
+| Control plane | Connection lifetime | Connection state, parser state, router match |
+| Data plane RX | CQE → parse → return | Provided buffer rings |
+| Data plane TX | Enqueue → CQE/NOTIF → return | Response buffers |
+| TLS cipher | Connection lifetime | cipher_in/cipher_out (io_uring targets) |
+| TLS plain | Single operation | wolfSSL_read output, wolfSSL_write input |
+| HTTP/2 frames | Session lifetime | nghttp2 output buffer |
+
+- **RLIMIT_MEMLOCK**: registered buffers count against memlock limit
+- **send_zc**: buffer pinned until `IORING_CQE_F_NOTIF`
+- **Provided buffers**: kernel owns until CQE, then app owns until returned to ring
+
+## Performance
+
+- **SQE batching**: NEVER submit per-SQE. Batch 16-64 minimum.
+- **CQE batching**: `io_uring_for_each_cqe` + `io_uring_cq_advance`, not single wait.
+- **DEFER_TASKRUN**: completions only on `io_uring_enter(GETEVENTS)`.
+- **Ring-per-worker + CPU pinning**: cache locality, no contention.
+- **NUMA**: allocate ring memory on local node.
+
+## Anti-patterns (NEVER DO)
+
+| Anti-pattern | Fix |
+|--------------|-----|
+| Blocking syscall in CQE handler | Offload to thread pool or io_uring op |
+| Mixed sync/async on same fd | All ops through ring |
+| Multiple outstanding sends on TCP | Per-conn send queue |
+| Unbounded queues | Fixed-size with backpressure |
+| Ignoring CQE_F_MORE | Always check, re-arm multishot |
+| WANT_READ/WANT_WRITE as fatal | Normal — arm recv/send, resume |
+| Close fd before all CQE | Cancel → wait → close |
+| Submit per-SQE | Accumulate, batch submit |
+
+## Library Integration
+
+- **picohttpparser**: streaming parse from provided buffers, zero-copy header pointers
+- **nghttp2**: buffer-based API (`nghttp2_session_mem_recv2`/`mem_send2`), no socket callbacks — app feeds raw bytes, gets output buffer
+- **ngtcp2 + nghttp3**: QUIC transport + HTTP/3, buffer-based same pattern as nghttp2
+- **wslay**: WebSocket frame codec, I/O agnostic — app manages send/recv
+- **yyjson**: in-place parse from recv buffers, zero-copy where possible
+
+## Testing Patterns
+
+- **Mock CQE delivery**: inject CQE sequences to test state machines deterministically
+- **Negative injection**: `-ECANCELED`, `-EPIPE`, `-ENOBUFS`, short reads
+- **socketpair**: integration tests without real network
+- **In-flight tracking**: assert op count == 0 after cleanup (detect leaks)
+
 ## context7 Documentation
 
 Fetch up-to-date liburing API docs:
