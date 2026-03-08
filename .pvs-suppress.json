@@ -1,0 +1,837 @@
+{
+    "version": 2,
+    "warnings": [
+        {
+            "CodeCurrent": 151827673,
+            "CodeNext": 71161,
+            "CodePrev": 2971969,
+            "ErrorCode": "V575",
+            "FileName": "test_io_static.c",
+            "Message": "The potential null pointer is passed into 'fwrite' function. Inspect the fourth argument."
+        },
+        {
+            "CodeCurrent": 2148955496,
+            "CodeNext": 71161,
+            "CodePrev": 2971969,
+            "ErrorCode": "V575",
+            "FileName": "test_io_static.c",
+            "Message": "The potential null pointer is passed into 'fwrite' function. Inspect the fourth argument."
+        },
+        {
+            "CodeCurrent": 138577988,
+            "CodeNext": 34521321,
+            "CodePrev": 1067457,
+            "ErrorCode": "V575",
+            "FileName": "test_io_multipart.c",
+            "Message": "The 'memcpy' function doesn't copy the whole string. Use 'strcpy / strcpy_s' function to preserve terminal null."
+        },
+        {
+            "CodeCurrent": 3588583784,
+            "CodeNext": 123,
+            "CodePrev": 0,
+            "ErrorCode": "V1071",
+            "FileName": "test_io_http2.c",
+            "Message": "Consider inspecting the 'client_submit_get' function. The return value is not always used. Total calls: _, discarded results: _."
+        },
+        {
+            "CodeCurrent": 4891985,
+            "CodeNext": 35393,
+            "CodePrev": 1542465,
+            "ErrorCode": "V575",
+            "FileName": "test_io_compress.c",
+            "Message": "The potential null pointer is passed into 'fputs' function. Inspect the second argument."
+        },
+        {
+            "CodeCurrent": 2103995844,
+            "CodeNext": 125,
+            "CodePrev": 1125711863,
+            "ErrorCode": "V522",
+            "FileName": "test_tls_uring.c",
+            "Message": "There might be dereferencing of a potential null pointer 'payload'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 468777026,
+            "CodeNext": 1489316161,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "test_tls_uring.c",
+            "Message": "There might be dereferencing of a potential null pointer 'client'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 276111,
+            "CodeNext": 1739630370,
+            "CodePrev": 976889173,
+            "ErrorCode": "V1048",
+            "FileName": "test_http2_server.c",
+            "Message": "The 'ng_out.len' variable was assigned the same value."
+        },
+        {
+            "CodeCurrent": 468777026,
+            "CodeNext": 1489316161,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "test_http2_server.c",
+            "Message": "There might be dereferencing of a potential null pointer 'client'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 5795161,
+            "CodeNext": 1190201284,
+            "CodePrev": 4039903775,
+            "ErrorCode": "V547",
+            "FileName": "test_http2_server.c",
+            "Message": "Expression 'ng_out.len > _' is always false."
+        },
+        {
+            "CodeCurrent": 787494352,
+            "CodeNext": 2801648537,
+            "CodePrev": 161244735,
+            "ErrorCode": "V1027",
+            "FileName": "test_http1_server.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in' class."
+        },
+        {
+            "CodeCurrent": 472831899,
+            "CodeNext": 0,
+            "CodePrev": 2539221067,
+            "ErrorCode": "V547",
+            "FileName": "test_http1_server.c",
+            "Message": "Expression 'ppv__len + http_len < sizeof (buf)' is always true."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 46557505,
+            "ErrorCode": "V773",
+            "FileName": "test_http1_server.c",
+            "Message": "The function was exited without releasing the 'client' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 5970241,
+            "ErrorCode": "V773",
+            "FileName": "io_sse.c",
+            "Message": "The function was exited without releasing the 'tmp' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 688684908,
+            "CodeNext": 492775705,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "io_tls.c",
+            "Message": "There might be dereferencing of a potential null pointer 'conn'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 4420661,
+            "CodeNext": 0,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "io_tls.c",
+            "Message": "There might be dereferencing of a potential null pointer 'ctx'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 11565377,
+            "ErrorCode": "V773",
+            "FileName": "io_tls.c",
+            "Message": "The function was exited without releasing the 'conn' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 1012278386,
+            "CodeNext": 71161,
+            "CodePrev": 2368947590,
+            "ErrorCode": "V575",
+            "FileName": "io_static.c",
+            "Message": "The potential null pointer is passed into 'fseek' function. Inspect the first argument."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 46557505,
+            "ErrorCode": "V773",
+            "FileName": "test_http2_server.c",
+            "Message": "The function was exited without releasing the 'client' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2071602215,
+            "CodeNext": 71161,
+            "CodePrev": 0,
+            "ErrorCode": "V575",
+            "FileName": "io_static.c",
+            "Message": "The potential null pointer is passed into 'fread' function. Inspect the first argument. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 468777026,
+            "CodeNext": 1489316161,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "test_http1_server.c",
+            "Message": "There might be dereferencing of a potential null pointer 'client'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 71161,
+            "ErrorCode": "V773",
+            "FileName": "io_static.c",
+            "Message": "The function was exited without releasing the 'buf' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 4673167,
+            "CodeNext": 1530896873,
+            "CodePrev": 3994928903,
+            "ErrorCode": "V1048",
+            "FileName": "test_io_http2.c",
+            "Message": "The 'client_out.len' variable was assigned the same value."
+        },
+        {
+            "CodeCurrent": 714611,
+            "CodeNext": 125,
+            "CodePrev": 2959681,
+            "ErrorCode": "V773",
+            "FileName": "io_static.c",
+            "Message": "The function was exited without closing the file referenced by the 'fp' handle. A resource leak is possible."
+        },
+        {
+            "CodeCurrent": 2918905,
+            "CodeNext": 148955,
+            "CodePrev": 169295055,
+            "ErrorCode": "V550",
+            "FileName": "io_compress.c",
+            "Message": "An odd precise comparison: gzip_q == _._. It's probably better to use a comparison with defined precision: fabs(A - B) < Epsilon."
+        },
+        {
+            "CodeCurrent": 2994681,
+            "CodeNext": 313814997,
+            "CodePrev": 33515056,
+            "ErrorCode": "V550",
+            "FileName": "io_compress.c",
+            "Message": "An odd precise comparison: qvalue == _._. It's probably better to use a comparison with defined precision: fabs(A - B) < Epsilon."
+        },
+        {
+            "CodeCurrent": 3482351129,
+            "CodeNext": 3956394951,
+            "CodePrev": 92633,
+            "ErrorCode": "V522",
+            "FileName": "test_http2_server.c",
+            "Message": "Dereferencing of the null pointer 'client' might take place. The potential null pointer is passed into 'do_buffer_handshake' function. Inspect the second argument. Check lines: _, _, _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 5826881,
+            "ErrorCode": "V773",
+            "FileName": "io_compress.c",
+            "Message": "The function was exited without releasing the 'buf' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2499152813,
+            "CodeNext": 17733,
+            "CodePrev": 3948273938,
+            "ErrorCode": "V522",
+            "FileName": "test_io_static.c",
+            "Message": "There might be dereferencing of a potential null pointer 'ent'."
+        },
+        {
+            "CodeCurrent": 91452469,
+            "CodeNext": 125,
+            "CodePrev": 5865793,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'session'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 93232473,
+            "CodeNext": 5762703,
+            "CodePrev": 3726213949,
+            "ErrorCode": "V547",
+            "FileName": "test_io_http2.c",
+            "Message": "Expression 'client_out.len > _' is always false."
+        },
+        {
+            "CodeCurrent": 2110287745,
+            "CodeNext": 0,
+            "CodePrev": 4120348488,
+            "ErrorCode": "V769",
+            "FileName": "io_sse.c",
+            "Message": "The 'nl' pointer in the 'nl - p' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 115617065,
+            "CodeNext": 125,
+            "CodePrev": 306904903,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'lc_names[i]'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 1916358169,
+            "CodeNext": 606920479,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'sd'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 2148955496,
+            "CodeNext": 71161,
+            "CodePrev": 2971969,
+            "ErrorCode": "V575",
+            "FileName": "test_io_spa.c",
+            "Message": "The potential null pointer is passed into 'fwrite' function. Inspect the fourth argument."
+        },
+        {
+            "CodeCurrent": 3482351129,
+            "CodeNext": 3956394951,
+            "CodePrev": 92633,
+            "ErrorCode": "V522",
+            "FileName": "test_http1_server.c",
+            "Message": "Dereferencing of the null pointer 'client' might take place. The potential null pointer is passed into 'do_buffer_handshake' function. Inspect the second argument. Check lines: _, _, _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 95299905,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'session' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2502124650,
+            "CodeNext": 2271981384,
+            "CodePrev": 2095756640,
+            "ErrorCode": "V769",
+            "FileName": "io_loop.c",
+            "Message": "The 'base' pointer in the 'base + ((size_t) i * buf_size)' expression could be nullptr. In such case, resulting value will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 1212368402,
+            "CodeNext": 2468509477,
+            "CodePrev": 125,
+            "ErrorCode": "V575",
+            "FileName": "io_tls.c",
+            "Message": "The potential null pointer is passed into 'memcpy' function. Inspect the first argument. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 3962098091,
+            "CodeNext": 125,
+            "CodePrev": 2939201,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'sd' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 3962098091,
+            "CodeNext": 125,
+            "CodePrev": 94218561,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'new_buf' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 5912897,
+            "ErrorCode": "V773",
+            "FileName": "io_server.c",
+            "Message": "The function was exited without releasing the 'srv' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 88117,
+            "CodeNext": 125,
+            "CodePrev": 1566271401,
+            "ErrorCode": "V612",
+            "FileName": "io_multipart.c",
+            "Message": "An unconditional 'return' within a loop."
+        },
+        {
+            "CodeCurrent": 2430766037,
+            "CodeNext": 34522537,
+            "CodePrev": 169887,
+            "ErrorCode": "V575",
+            "FileName": "test_io_multipart.c",
+            "Message": "The 'memcpy' function doesn't copy the whole string. Use 'strcpy / strcpy_s' function to preserve terminal null."
+        },
+        {
+            "CodeCurrent": 3971652057,
+            "CodeNext": 23164013,
+            "CodePrev": 1442707,
+            "ErrorCode": "V769",
+            "FileName": "io_http1.c",
+            "Message": "The 'qmark' pointer in the 'qmark - path' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 721401,
+            "CodeNext": 33243,
+            "CodePrev": 125,
+            "ErrorCode": "V550",
+            "FileName": "io_compress.c",
+            "Message": "An odd precise comparison: br_q == _._. It's probably better to use a comparison with defined precision: fabs(A - B) < Epsilon."
+        },
+        {
+            "CodeCurrent": 737209239,
+            "CodeNext": 9669539,
+            "CodePrev": 0,
+            "ErrorCode": "V769",
+            "FileName": "io_http2.c",
+            "Message": "The 'sd->body_buf' pointer in the 'sd->body_buf + sd->body_len' expression could be nullptr. In such case, resulting value will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 5857601,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'nva' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 3150813027,
+            "CodeNext": 3150815651,
+            "CodePrev": 0,
+            "ErrorCode": "V1027",
+            "FileName": "io_proxy_proto.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in' class."
+        },
+        {
+            "CodeCurrent": 276111,
+            "CodeNext": 343027252,
+            "CodePrev": 1205960519,
+            "ErrorCode": "V1048",
+            "FileName": "test_http2_server.c",
+            "Message": "The 'ng_out.len' variable was assigned the same value."
+        },
+        {
+            "CodeCurrent": 3849709445,
+            "CodeNext": 3849709413,
+            "CodePrev": 125,
+            "ErrorCode": "V525",
+            "FileName": "picohttpparser.c",
+            "Message": "The code contains the collection of similar blocks. Check items ''H'', ''T'', ''T'', ''P'', ''/'', ''_'', ''.'' in lines _, _, _, _, _, _, _."
+        },
+        {
+            "CodeCurrent": 16069,
+            "CodeNext": 125,
+            "CodePrev": 125,
+            "ErrorCode": "V769",
+            "FileName": "io_request.c",
+            "Message": "The 'amp' pointer in the 'amp + _' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 94218561,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'new_buf' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 1946579240,
+            "CodeNext": 1946561128,
+            "CodePrev": 0,
+            "ErrorCode": "V641",
+            "FileName": "io_proxy_proto.c",
+            "Message": "The size of the '& result->src_addr' buffer is not a multiple of the element size of the type 'struct sockaddr_in_'."
+        },
+        {
+            "CodeCurrent": 3482351129,
+            "CodeNext": 3956394951,
+            "CodePrev": 92633,
+            "ErrorCode": "V522",
+            "FileName": "test_tls_uring.c",
+            "Message": "Dereferencing of the null pointer 'client' might take place. The potential null pointer is passed into 'do_buffer_handshake' function. Inspect the second argument. Check lines: _, _, _, _."
+        },
+        {
+            "CodeCurrent": 351958197,
+            "CodeNext": 125,
+            "CodePrev": 4173436570,
+            "ErrorCode": "V522",
+            "FileName": "io_buffer.c",
+            "Message": "There might be dereferencing of a potential null pointer 'pool->file_slots'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 37293873,
+            "CodeNext": 379652076,
+            "CodePrev": 65535,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'nva'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 5777729,
+            "ErrorCode": "V773",
+            "FileName": "io_tls.c",
+            "Message": "The function was exited without releasing the 'ctx' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 2906433,
+            "ErrorCode": "V773",
+            "FileName": "io_security.c",
+            "Message": "The function was exited without releasing the 'st' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2783178720,
+            "CodeNext": 4178376768,
+            "CodePrev": 3566841812,
+            "ErrorCode": "V769",
+            "FileName": "io_buffer.c",
+            "Message": "The 'pool->reg_buf_base' pointer in the expression could be nullptr. In such case, resulting value of arithmetic operations on this pointer will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 188412225,
+            "ErrorCode": "V773",
+            "FileName": "io_ctx.c",
+            "Message": "The function was exited without releasing the 'new_base' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 3559119898,
+            "CodeNext": 94073,
+            "CodePrev": 926928449,
+            "ErrorCode": "V769",
+            "FileName": "test_tls_uring.c",
+            "Message": "The 'received' pointer in the 'received + total_read' expression could be nullptr. In such case, resulting value will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 11007029,
+            "CodeNext": 0,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_buffer.c",
+            "Message": "There might be dereferencing of a potential null pointer 'pool'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 11753793,
+            "ErrorCode": "V773",
+            "FileName": "io_loop.c",
+            "Message": "The function was exited without releasing the 'loop' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2783178720,
+            "CodeNext": 4178376768,
+            "CodePrev": 3566841812,
+            "ErrorCode": "V522",
+            "FileName": "io_buffer.c",
+            "Message": "There might be dereferencing of a potential null pointer 'pool->reg_iovs'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 1150160114,
+            "CodeNext": 1484689729,
+            "CodePrev": 3659821012,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'lc_names'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 38013,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'lc_names' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 1213317,
+            "ErrorCode": "V773",
+            "FileName": "io_response.c",
+            "Message": "The function was exited without releasing the 'dup_value' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 11563329,
+            "ErrorCode": "V773",
+            "FileName": "io_loop.c",
+            "Message": "The function was exited without releasing the 'base' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 275271059,
+            "CodeNext": 39994233,
+            "CodePrev": 125,
+            "ErrorCode": "V769",
+            "FileName": "io_http2.c",
+            "Message": "The 'a->buf' pointer in the 'a->buf + a->len' expression could be nullptr. In such case, resulting value will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 94218561,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'new_buf' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 1946561128,
+            "CodeNext": 0,
+            "CodePrev": 1946579240,
+            "ErrorCode": "V1027",
+            "FileName": "io_proxy_proto.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in_' class."
+        },
+        {
+            "CodeCurrent": 2499152813,
+            "CodeNext": 17733,
+            "CodePrev": 3948273938,
+            "ErrorCode": "V522",
+            "FileName": "test_io_spa.c",
+            "Message": "There might be dereferencing of a potential null pointer 'ent'."
+        },
+        {
+            "CodeCurrent": 4250157951,
+            "CodeNext": 10253,
+            "CodePrev": 0,
+            "ErrorCode": "V666",
+            "FileName": "io_radix.c",
+            "Message": "Consider inspecting third argument of the function 'io_radix_node_create'. It is possible that the value does not correspond with the length of a string which was passed with the first argument."
+        },
+        {
+            "CodeCurrent": 10023989,
+            "CodeNext": 0,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_loop.c",
+            "Message": "There might be dereferencing of a potential null pointer 'loop'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 199152613,
+            "CodeNext": 2337,
+            "CodePrev": 564429984,
+            "ErrorCode": "V547",
+            "FileName": "io_http1.c",
+            "Message": "Expression 'i >= IO_MAX_HEADERS' is always false."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 11843905,
+            "ErrorCode": "V773",
+            "FileName": "io_buffer.c",
+            "Message": "The function was exited without releasing the 'pool' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 5502005,
+            "CodeNext": 10969669,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "io_server.c",
+            "Message": "There might be dereferencing of a potential null pointer 'srv'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 3971725629,
+            "CodeNext": 1447565,
+            "CodePrev": 1519937,
+            "ErrorCode": "V769",
+            "FileName": "io_http2.c",
+            "Message": "The 'q' pointer in the 'q - val_copy' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 5970241,
+            "ErrorCode": "V773",
+            "FileName": "io_response.c",
+            "Message": "The function was exited without releasing the 'tmp' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2488418465,
+            "CodeNext": 17439693,
+            "CodePrev": 0,
+            "ErrorCode": "V522",
+            "FileName": "io_response.c",
+            "Message": "There might be dereferencing of a potential null pointer 'resp->headers'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 1946561128,
+            "CodeNext": 0,
+            "CodePrev": 1946579240,
+            "ErrorCode": "V641",
+            "FileName": "io_proxy_proto.c",
+            "Message": "The size of the '& result->dst_addr' buffer is not a multiple of the element size of the type 'struct sockaddr_in_'."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 2906433,
+            "ErrorCode": "V773",
+            "FileName": "io_auth.c",
+            "Message": "The function was exited without releasing the 'st' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 377450817,
+            "ErrorCode": "V773",
+            "FileName": "io_response.c",
+            "Message": "The function was exited without releasing the 'new_value' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 2000737048,
+            "CodeNext": 0,
+            "CodePrev": 0,
+            "ErrorCode": "V1027",
+            "FileName": "test_proxy_proto.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in_' class."
+        },
+        {
+            "CodeCurrent": 1714873658,
+            "CodeNext": 714519,
+            "CodePrev": 0,
+            "ErrorCode": "V769",
+            "FileName": "io_proxy_proto.c",
+            "Message": "The 'token_end' pointer in the 'token_end - pos' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 46557505,
+            "ErrorCode": "V773",
+            "FileName": "test_tls_uring.c",
+            "Message": "The function was exited without releasing the 'client' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 2939201,
+            "ErrorCode": "V773",
+            "FileName": "io_http2.c",
+            "Message": "The function was exited without releasing the 'sd' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 3150815651,
+            "CodeNext": 0,
+            "CodePrev": 3150813027,
+            "ErrorCode": "V1027",
+            "FileName": "io_proxy_proto.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in' class."
+        },
+        {
+            "CodeCurrent": 1946579240,
+            "CodeNext": 1946561128,
+            "CodePrev": 0,
+            "ErrorCode": "V1027",
+            "FileName": "io_proxy_proto.c",
+            "Message": "Pointer to an object of the 'sockaddr_storage' class is cast to unrelated 'sockaddr_in_' class."
+        },
+        {
+            "CodeCurrent": 2487,
+            "CodeNext": 0,
+            "CodePrev": 3131024092,
+            "ErrorCode": "V522",
+            "FileName": "test_io_ctx.c",
+            "Message": "There might be dereferencing of a potential null pointer 'data'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 31629,
+            "CodeNext": 125,
+            "CodePrev": 125,
+            "ErrorCode": "V769",
+            "FileName": "io_request.c",
+            "Message": "The 'semi' pointer in the 'semi + _' expression could be nullptr. In such case, resulting value will be senseless and it should not be used."
+        },
+        {
+            "CodeCurrent": 1665588987,
+            "CodeNext": 21087811,
+            "CodePrev": 0,
+            "ErrorCode": "V575",
+            "FileName": "io_response.c",
+            "Message": "The potential null pointer is passed into 'memcpy' function. Inspect the first argument. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 714541,
+            "CodeNext": 125,
+            "CodePrev": 188158273,
+            "ErrorCode": "V773",
+            "FileName": "io_response.c",
+            "Message": "The function was exited without releasing the 'dup_name' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 867,
+            "CodeNext": 88603,
+            "CodePrev": 0,
+            "ErrorCode": "V779",
+            "FileName": "picohttpparser.c",
+            "Message": "Unreachable code detected. It is possible that an error is present."
+        },
+        {
+            "CodeCurrent": 38107521,
+            "CodeNext": 1177984065,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_http2.c",
+            "Message": "There might be dereferencing of a potential null pointer 'rd'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 3320824644,
+            "CodeNext": 182908835,
+            "CodePrev": 125,
+            "ErrorCode": "V769",
+            "FileName": "io_http2.c",
+            "Message": "The 'session->out_buf' pointer in the 'session->out_buf + session->out_len' expression could be nullptr. In such case, resulting value will be senseless and it should not be used. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 2906433,
+            "ErrorCode": "V773",
+            "FileName": "io_ratelimit.c",
+            "Message": "The function was exited without releasing the 'st' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 8461209,
+            "CodeNext": 134739,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_auth.c",
+            "Message": "There might be dereferencing of a potential null pointer 'st'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 707983,
+            "CodeNext": 125,
+            "CodePrev": 11608385,
+            "ErrorCode": "V773",
+            "FileName": "io_cors.c",
+            "Message": "The function was exited without releasing the 'copy' pointer. A memory leak is possible."
+        },
+        {
+            "CodeCurrent": 8245,
+            "CodeNext": 6158369,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_cors.c",
+            "Message": "There might be dereferencing of a potential null pointer 'copy'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 267957,
+            "CodeNext": 1554279,
+            "CodePrev": 125,
+            "ErrorCode": "V522",
+            "FileName": "io_ratelimit.c",
+            "Message": "There might be dereferencing of a potential null pointer 'st'. Check lines: _, _."
+        },
+        {
+            "CodeCurrent": 2000737048,
+            "CodeNext": 0,
+            "CodePrev": 0,
+            "ErrorCode": "V641",
+            "FileName": "test_proxy_proto.c",
+            "Message": "The size of the '& res.src_addr' buffer is not a multiple of the element size of the type 'struct sockaddr_in_'."
+        },
+        {
+            "CodeCurrent": 1104145153,
+            "CodeNext": 125,
+            "CodePrev": 188115265,
+            "ErrorCode": "V522",
+            "FileName": "io_security.c",
+            "Message": "There might be dereferencing of a potential null pointer 'st'. Check lines: _, _."
+        }
+    ]
+}
