@@ -1,0 +1,3 @@
+# Force GitHub linguist to classify all code as C (not C++)
+*.h linguist-language=C
+*.c linguist-language=C

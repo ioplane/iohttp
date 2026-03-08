@@ -1,0 +1,50 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+
+# Build directories
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Doxygen output
+docs/api/
+html/
+latex/
+
+# Certificate files (generated)
+tests/certs/*.pem
+tests/certs/*.key
+tests/certs/*.crt
+tests/certs/*.csr
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Podman/Docker
+.buildah/
+
+# Logs
+*.log
+!docs/**/*.log
+
+# Temporary files
+*.tmp
+.DS_Store
+.deployment-credentials
+
+# Benchmark results (JSON output)
+tests/bench/*.json
