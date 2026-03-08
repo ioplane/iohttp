@@ -59,9 +59,9 @@ void test_sse_format_data_only(void)
     size_t len;
     io_sse_stream_flush(&stream, &out, &len);
 
-    TEST_ASSERT_GREATER_THAN(0, len);
     const char *expected = "data: hello\n\n";
-    TEST_ASSERT_EQUAL_STRING(expected, (const char *)out);
+    TEST_ASSERT_EQUAL_size_t(strlen(expected), len);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(out, expected, len));
 }
 
 /* ---- test_sse_format_with_event ---- */

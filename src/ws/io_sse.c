@@ -27,6 +27,9 @@ static int sse_ensure_capacity(io_sse_stream_t *stream, size_t additional)
     }
 
     size_t new_cap = stream->buf_capacity;
+    if (new_cap == 0) {
+        new_cap = IO_SSE_INITIAL_BUF;
+    }
     while (new_cap < needed) {
         new_cap *= 2;
     }
@@ -145,6 +148,9 @@ int io_sse_format_event(io_sse_stream_t *stream, const io_sse_event_t *event)
         /* track last event ID */
         free(stream->last_event_id);
         stream->last_event_id = strdup(event->id);
+        if (stream->last_event_id == nullptr) {
+            return -ENOMEM;
+        }
     }
 
     /* retry field */

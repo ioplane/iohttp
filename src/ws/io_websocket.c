@@ -226,10 +226,16 @@ int io_ws_frame_decode(const uint8_t *buf, size_t buf_len, io_ws_frame_t *frame)
         return -EAGAIN;
     }
 
+    /* Guard against int overflow on return value */
+    size_t total = offset + payload_len;
+    if (total > (size_t)INT32_MAX) {
+        return -E2BIG;
+    }
+
     frame->payload_len = payload_len;
     frame->payload = (payload_len > 0) ? (buf + offset) : nullptr;
 
-    return (int)(offset + payload_len);
+    return (int)total;
 }
 
 /* ---- Masking ---- */
