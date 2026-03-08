@@ -38,6 +38,7 @@ typedef struct {
     io_match_status_t status;
     io_handler_fn handler;
     const io_route_opts_t *opts;
+    const io_route_meta_t *meta;         /* route metadata (latest, post-set_meta) */
     io_param_t params[IO_MAX_PATH_PARAMS];
     uint32_t param_count;
     char allowed_methods[128];           /* "GET, POST, DELETE" for 405 */

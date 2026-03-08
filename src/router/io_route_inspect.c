@@ -279,7 +279,6 @@ static int find_and_set_meta(io_radix_node_t *node, const char *pattern, size_t 
          * Handle prefix compression: if the child's prefix is longer
          * than the segment, it may span multiple segments (compressed).
          */
-        (void)prefix_len;
     }
 
     return -ENOENT;

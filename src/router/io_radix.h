@@ -42,6 +42,7 @@ typedef struct {
 typedef struct {
     void *handler;
     void *metadata;
+    const io_route_meta_t *meta;
     io_param_t params[IO_MAX_PATH_PARAMS];
     uint32_t param_count;
 } io_radix_match_t;
@@ -68,6 +69,7 @@ void io_radix_destroy(io_radix_tree_t *tree);
  * @param pattern  URL pattern (e.g. "/users/:id").
  * @param handler  Opaque handler pointer.
  * @param metadata Opaque metadata pointer.
+ * @param meta     Route metadata pointer (may be nullptr).
  * @return 0 on success, -ENOMEM, -EINVAL for bad pattern, -EEXIST for conflict.
  */
 [[nodiscard]] int io_radix_insert(io_radix_tree_t *tree, const char *pattern, void *handler,

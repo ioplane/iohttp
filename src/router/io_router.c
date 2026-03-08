@@ -477,6 +477,7 @@ io_route_match_t io_router_dispatch(const io_router_t *r, io_method_t method, co
             result.status = IO_MATCH_FOUND;
             result.handler = (io_handler_fn)(uintptr_t)rmatch.handler;
             result.opts = (const io_route_opts_t *)(uintptr_t)rmatch.metadata;
+            result.meta = rmatch.meta;
             result.param_count = rmatch.param_count;
             memcpy(result.params, rmatch.params, rmatch.param_count * sizeof(io_param_t));
             return result;
@@ -491,6 +492,7 @@ io_route_match_t io_router_dispatch(const io_router_t *r, io_method_t method, co
             result.status = IO_MATCH_FOUND;
             result.handler = (io_handler_fn)(uintptr_t)rmatch.handler;
             result.opts = (const io_route_opts_t *)(uintptr_t)rmatch.metadata;
+            result.meta = rmatch.meta;
             result.param_count = rmatch.param_count;
             memcpy(result.params, rmatch.params, rmatch.param_count * sizeof(io_param_t));
             return result;

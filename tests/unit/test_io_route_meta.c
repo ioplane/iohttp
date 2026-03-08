@@ -202,8 +202,12 @@ void test_meta_set_meta_after_registration(void)
     TEST_ASSERT_NOT_NULL(ctx.routes[0].meta);
     TEST_ASSERT_EQUAL_STRING("List users", ctx.routes[0].meta->summary);
 
+    /* Dispatch also sees updated meta */
     io_route_match_t m = io_router_dispatch(router, IO_METHOD_GET, "/users", strlen("/users"));
     TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
+    TEST_ASSERT_NOT_NULL(m.meta);
+    TEST_ASSERT_EQUAL_STRING("List users", m.meta->summary);
+    /* opts unchanged */
     TEST_ASSERT_NOT_NULL(m.opts);
     TEST_ASSERT_TRUE(m.opts->auth_required);
     TEST_ASSERT_EQUAL_UINT32(0xFF, m.opts->permissions);
@@ -228,8 +232,8 @@ void test_meta_opts_and_meta_combined(void)
     TEST_ASSERT_NOT_NULL(m.opts);
     TEST_ASSERT_TRUE(m.opts->auth_required);
     TEST_ASSERT_EQUAL_UINT32(0x01, m.opts->permissions);
-    TEST_ASSERT_NOT_NULL(m.opts->meta);
-    TEST_ASSERT_EQUAL_STRING("Delete user", m.opts->meta->summary);
+    TEST_ASSERT_NOT_NULL(m.meta);
+    TEST_ASSERT_EQUAL_STRING("Delete user", m.meta->summary);
 }
 
 int main(void)

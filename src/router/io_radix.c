@@ -514,6 +514,7 @@ static int lookup_recursive(const io_radix_node_t *node, const char *path, size_
         if (node->handler) {
             match->handler = node->handler;
             match->metadata = node->metadata;
+            match->meta = node->meta;
             return 0;
         }
         return -ENOENT;
@@ -583,6 +584,7 @@ static int lookup_recursive(const io_radix_node_t *node, const char *path, size_
 
         match->handler = child->handler;
         match->metadata = child->metadata;
+        match->meta = child->meta;
         return 0;
     }
 
