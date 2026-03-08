@@ -78,6 +78,9 @@ pkg_check_modules(WOLFSSL REQUIRED wolfssl>=5.8)
 # picohttpparser (bundled — header-only + one .c file)
 # Will be added as source in src/http/
 
+# Ensure pkg-config finds libraries in /usr/local
+set(ENV{PKG_CONFIG_PATH} "/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+
 # ngtcp2 (QUIC transport)
 pkg_check_modules(NGTCP2 libngtcp2)
 pkg_check_modules(NGTCP2_WOLFSSL libngtcp2_crypto_wolfssl)
@@ -177,6 +180,42 @@ if(CPPCHECK)
             -I ${CMAKE_SOURCE_DIR}/src
             ${CMAKE_SOURCE_DIR}/src/
         COMMENT "Running cppcheck"
+        VERBATIM
+    )
+endif()
+
+# PVS-Studio (compile_commands.json approach — simpler, no cmake module needed)
+find_program(PVS_STUDIO pvs-studio-analyzer)
+find_program(PLOG_CONVERTER plog-converter)
+if(PVS_STUDIO AND PLOG_CONVERTER)
+    add_custom_target(pvs-studio
+        COMMAND ${PVS_STUDIO} analyze
+            -f ${CMAKE_BINARY_DIR}/compile_commands.json
+            -o ${CMAKE_BINARY_DIR}/pvs-studio.log
+            -j 4
+            -e ${CMAKE_SOURCE_DIR}/src/http/picohttpparser.c
+        COMMAND ${PLOG_CONVERTER}
+            -t errorfile
+            -a "GA:1,2"
+            ${CMAKE_BINARY_DIR}/pvs-studio.log
+        COMMENT "Running PVS-Studio analysis (GA errors + warnings)"
+        VERBATIM
+    )
+endif()
+
+# CodeChecker (Clang SA + clang-tidy)
+find_program(CODECHECKER CodeChecker)
+if(CODECHECKER)
+    add_custom_target(codechecker
+        COMMAND ${CODECHECKER} analyze
+            ${CMAKE_BINARY_DIR}/compile_commands.json
+            -o ${CMAKE_BINARY_DIR}/cc-results
+            --analyzers clangsa clang-tidy
+            -j 4
+        COMMAND ${CODECHECKER} parse
+            ${CMAKE_BINARY_DIR}/cc-results
+            --trim-path-prefix ${CMAKE_SOURCE_DIR}/
+        COMMENT "Running CodeChecker analysis (Clang SA + clang-tidy)"
         VERBATIM
     )
 endif()
@@ -562,7 +601,7 @@ if(NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
     target_include_directories(io_http2 PUBLIC ${NGHTTP2_INCLUDE_DIR})
     target_link_libraries(io_http2 PUBLIC ${NGHTTP2_LIBRARY})
 endif()
-target_link_libraries(io_http2 PUBLIC io_request io_response)
+target_link_libraries(io_http2 PUBLIC io_request io_response io_ctx)
 
 if(BUILD_TESTING AND TARGET unity AND NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
     add_executable(test_io_http2 tests/unit/test_io_http2.c)
@@ -597,4 +636,59 @@ if(BUILD_TESTING AND TARGET unity AND NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
         TEST_CERTS_DIR="${CMAKE_SOURCE_DIR}/tests/certs"
     )
     add_test(NAME test_http2_server COMMAND test_http2_server)
+endif()
+
+# ============================================================================
+# Sprint 10: QUIC transport (ngtcp2 + ngtcp2_crypto_wolfssl)
+# ============================================================================
+
+if(NGTCP2_FOUND AND NGTCP2_WOLFSSL_FOUND)
+    add_library(io_quic STATIC src/http/io_quic.c)
+    target_include_directories(io_quic PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(io_quic PUBLIC
+        ${NGTCP2_INCLUDE_DIRS}
+        ${NGTCP2_WOLFSSL_INCLUDE_DIRS}
+        ${WOLFSSL_INCLUDE_DIRS}
+    )
+    target_link_directories(io_quic PUBLIC
+        ${NGTCP2_LIBRARY_DIRS}
+        ${NGTCP2_WOLFSSL_LIBRARY_DIRS}
+        ${WOLFSSL_LIBRARY_DIRS}
+    )
+    target_link_libraries(io_quic PUBLIC
+        ${NGTCP2_LIBRARIES}
+        ${NGTCP2_WOLFSSL_LIBRARIES}
+        ${WOLFSSL_LIBRARIES}
+    )
+    message(STATUS "QUIC transport enabled (ngtcp2 + wolfSSL)")
+
+    if(BUILD_TESTING AND TARGET unity)
+        add_executable(test_io_quic tests/unit/test_io_quic.c)
+        target_include_directories(test_io_quic PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_include_directories(test_io_quic PRIVATE
+            ${NGTCP2_INCLUDE_DIRS}
+            ${NGTCP2_WOLFSSL_INCLUDE_DIRS}
+            ${WOLFSSL_INCLUDE_DIRS}
+        )
+        target_link_directories(test_io_quic PRIVATE
+            ${NGTCP2_LIBRARY_DIRS}
+            ${NGTCP2_WOLFSSL_LIBRARY_DIRS}
+            ${WOLFSSL_LIBRARY_DIRS}
+        )
+        target_link_libraries(test_io_quic PRIVATE
+            unity io_quic
+            ${NGTCP2_LIBRARIES}
+            ${NGTCP2_WOLFSSL_LIBRARIES}
+            ${WOLFSSL_LIBRARIES}
+        )
+        target_compile_options(test_io_quic PRIVATE
+            -Wno-missing-prototypes -Wno-missing-declarations
+        )
+        target_compile_definitions(test_io_quic PRIVATE
+            TEST_CERTS_DIR="${CMAKE_SOURCE_DIR}/tests/certs"
+        )
+        add_test(NAME test_io_quic COMMAND test_io_quic)
+    endif()
+else()
+    message(STATUS "QUIC transport disabled (ngtcp2 or ngtcp2_crypto_wolfssl not found)")
 endif()
