@@ -8,6 +8,8 @@
 
 **Current state:** S1–S7 complete (29 tests), HTTP/1.1 + HTTP/2 + TLS + router + middleware + WebSocket + SSE + compression + multipart + SPA + static files.
 
+**liboas (separate project):** OpenAPI specification generation, validation, and documentation UI live in a separate `liboas` library — not in iohttp. iohttp provides raw route metadata via introspection API (`io_route_inspect.h`) and field descriptors (`io_field_desc_t`); liboas consumes these to generate OpenAPI 3.1 JSON, serve Scalar UI, and produce client SDKs. This mirrors the **bunrouter + huma** pattern in Go: the router/framework (iohttp) knows nothing about OpenAPI spec format; the adapter library (liboas) bridges the gap. Integration point: `io_liboas_adapter()` middleware that plugs liboas into iohttp's middleware chain.
+
 **Build/test:**
 ```bash
 cmake --preset clang-debug
@@ -720,25 +722,26 @@ Combined/JSON format access logging with configurable output. Uses `io_ctx_t` fo
 
 ---
 
-## Sprint 12: OpenAPI Generation & Developer Experience
+## Sprint 12: Route Metadata, liboas Integration & Developer Experience
 
-**Goal:** Auto-generate OpenAPI 3.1 spec from route metadata and field descriptors. Scalar UI integration. Developer experience features.
+**Goal:** Extend route introspection with endpoint metadata (summary, tags, field descriptors). Provide the adapter interface for liboas (separate project) to generate OpenAPI 3.1 and serve Scalar UI. iohttp does NOT generate OpenAPI spec itself — that's liboas's job. Pattern: **bunrouter + huma** (Go).
 
-### Task 12.1: Route Metadata & OpenAPI Generation
+### Task 12.1: Endpoint Metadata & Extended Introspection
 
 **Files:**
-- Create: `src/router/io_openapi.h`
-- Create: `src/router/io_openapi.c`
-- Create: `tests/unit/test_io_openapi.c`
+- Create: `src/router/io_endpoint_meta.h`
+- Modify: `src/router/io_route_inspect.h` — extend with metadata
+- Modify: `src/router/io_route_inspect.c`
+- Create: `tests/unit/test_io_endpoint_meta.c`
 
-Static metadata attached to routes at registration time. No runtime overhead — spec is generated on `/openapi.json` request (or at startup with caching).
+Metadata attached to routes at registration time. iohttp stores it; liboas reads it via introspection API.
 
 ```c
 typedef struct {
     const char          *summary;
     const char          *description;
     const char          *tag;
-    const io_field_desc_t *request_body;    /* reuse bind descriptors */
+    const io_field_desc_t *request_body;    /* reuse bind descriptors from S9 */
     size_t               request_body_count;
     const io_field_desc_t *response_body;
     size_t               response_body_count;
@@ -749,12 +752,8 @@ typedef struct {
 [[nodiscard]] int io_router_get_meta(io_router_t *r, const char *pattern,
                                       io_handler_fn h, const io_endpoint_meta_t *meta);
 
-/* Generate OpenAPI 3.1 JSON */
-[[nodiscard]] int io_openapi_generate(const io_router_t *r, char *buf, size_t buf_size,
-                                       size_t *out_len);
-
-/* Built-in handler: GET /openapi.json */
-int io_openapi_handler(io_ctx_t *c);
+/* Extended introspection — returns metadata for liboas consumption */
+const io_endpoint_meta_t *io_route_info_meta(const io_route_info_t *info);
 ```
 
 **Declarative macro (using `__VA_OPT__`):**
@@ -765,23 +764,37 @@ int io_openapi_handler(io_ctx_t *c);
         __VA_OPT__(, &(io_endpoint_meta_t){__VA_ARGS__}))
 ```
 
-**Tests: ~10**
+**What iohttp provides (this sprint):**
+- `io_endpoint_meta_t` struct + registration API
+- Extended `io_route_inspect()` returning metadata
+- Field descriptors (`io_field_desc_t` from S9) reused as schema source
 
-### Task 12.2: Scalar UI Integration
+**What liboas provides (separate project, later):**
+- `io_liboas_adapter()` middleware — reads iohttp introspection → generates OpenAPI 3.1
+- `GET /openapi.json` handler
+- Scalar UI handler (`GET /docs`)
+- Client SDK generation
+- OpenAPI spec validation
+
+**Tests: ~8**
+
+### Task 12.2: liboas Adapter Interface
 
 **Files:**
-- Create: `src/static/io_scalar.h`
-- Create: `src/static/io_scalar.c`
-- Create: `tests/unit/test_io_scalar.c`
+- Create: `src/middleware/io_liboas.h` — adapter interface (header-only)
 
-Embed Scalar UI HTML via `#embed` (C23). Single handler serves the Scalar page pointing to `/openapi.json`. Zero external dependencies at runtime.
+Defines the callback interface that liboas implements. iohttp ships this header; liboas links against it. Users call `io_liboas_mount(router, liboas_instance)`.
 
 ```c
-/* Register Scalar UI at given path (default /docs) */
-[[nodiscard]] int io_scalar_mount(io_router_t *r, const char *path);
+/* Adapter interface — implemented by liboas, consumed by iohttp */
+typedef struct io_oas_adapter io_oas_adapter_t;
+
+/* Mount liboas adapter: registers /openapi.json and /docs handlers */
+[[nodiscard]] int io_oas_mount(io_router_t *r, io_oas_adapter_t *adapter,
+                                const char *spec_path, const char *docs_path);
 ```
 
-**Tests: ~4**
+**Tests: ~4 (mock adapter)**
 
 ### Task 12.3: Graceful Shutdown & Health Checks
 
@@ -803,7 +816,7 @@ int io_health_live(io_ctx_t *c);     /* GET /livez */
 
 **Tests: ~6**
 
-**Sprint 12 total: ~20 new tests. Estimated: ~171 total.**
+**Sprint 12 total: ~18 new tests. Estimated: ~169 total.**
 
 ---
 
@@ -867,8 +880,8 @@ Microbenchmarks for router dispatch (10K routes), JSON parse/write (various size
 | **S9** | **JSON API** | **yyjson binding, errors, cookies** | **~32** | **~85** |
 | **S10** | **HTTP/3** | **ngtcp2 + nghttp3 + QUIC** | **~36** | **~121** |
 | **S11** | **Observability** | **Logging, metrics, tracing** | **~30** | **~151** |
-| **S12** | **OpenAPI + DX** | **OpenAPI gen, Scalar, health checks** | **~20** | **~171** |
-| **S13** | **Stabilization** | **Fuzzing, benchmarks, docs, v0.1.0** | **—** | **~171** |
+| **S12** | **Metadata + liboas + DX** | **Endpoint metadata, liboas adapter interface, health checks** | **~18** | **~169** |
+| **S13** | **Stabilization** | **Fuzzing, benchmarks, docs, v0.1.0** | **—** | **~169** |
 
 ## Competitive Positioning After S13
 
@@ -878,13 +891,13 @@ Microbenchmarks for router dispatch (10K routes), JSON parse/write (various size
 | Context | `io_ctx_t*` | `*gin.Context` | `echo.Context` | extractors | `HttpRequest` | `(req, res)` |
 | JSON binding | field descriptors | `ShouldBindJSON` | `Bind` | `Json<T>` | `web::Json<T>` | body-parser |
 | Error format | RFC 9457 | custom | `HTTPError` | custom | `ResponseError` | custom |
-| OpenAPI | code-gen | swaggo | echo-swagger | utoipa | paperclip | swagger |
+| OpenAPI | liboas (adapter) | swaggo | echo-swagger | utoipa | paperclip | swagger |
 | Middleware | `fn(ctx, next)` | `HandlerFunc` | `MiddlewareFunc` | tower layers | middleware | `fn(req,res,next)` |
 | I/O | io_uring | goroutines | goroutines | tokio | tokio/actix | libuv |
 | TLS | wolfSSL native | stdlib | stdlib | rustls | rustls/native | — |
 | HTTP/3 | ngtcp2+nghttp3 | quic-go | — | quinn | — | — |
 
-**iohttp's unique position:** Only C REST framework with io_uring core, wolfSSL native TLS, HTTP/1.1+2+3, and Go/Rust-style developer ergonomics via `io_ctx_t`.
+**iohttp's unique position:** Only C REST framework with io_uring core, wolfSSL native TLS, HTTP/1.1+2+3, and Go/Rust-style developer ergonomics via `io_ctx_t`. OpenAPI via separate liboas project (bunrouter+huma pattern).
 
 ## Critical Implementation Notes
 
