@@ -146,3 +146,16 @@ Upper layers work with protocol-independent abstractions:
 - Post-handler: response validation hook
 - Publish helper: `/openapi.json` endpoint
 - Normalized context: real client IP, TLS/mTLS status, auth results, route params, content type
+
+## context7 Documentation
+
+Fetch up-to-date library API docs:
+- `/h2o/picohttpparser` — HTTP/1.1 parser
+- `/nghttp2/nghttp2` — HTTP/2 (frames, HPACK, streams)
+- `/ngtcp2/ngtcp2` — QUIC transport
+- `/ngtcp2/nghttp3` — HTTP/3 + QPACK
+- `/tatsuhiro-t/wslay` — WebSocket (RFC 6455)
+- `/ngtcp2/sfparse` — Structured Fields (RFC 9651)
+- `/ibireme/yyjson` — JSON serialization
+- `/wolfssl/wolfssl` — TLS 1.3 / QUIC crypto
+- `/axboe/liburing` — io_uring

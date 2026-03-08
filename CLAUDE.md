@@ -35,6 +35,7 @@ cmake --build --preset clang-debug --target docs      # Doxygen
 - **iohttp-specific deps**: nghttp2, ngtcp2 + ngtcp2_crypto_wolfssl, nghttp3, zlib-devel, brotli-devel
 - **picohttpparser**: vendored (~800 LOC, no external dep)
 - `_GNU_SOURCE` needed for `explicit_bzero`, `signalfd`, etc. under `-std=c23`
+- **ALL development/compilation MUST happen inside the podman container** — never run build commands directly on host
 
 ## Compiler Strategy (dual-compiler)
 
@@ -159,11 +160,42 @@ See `.claude/skills/` for detailed guidance on:
 - **`iohttp-architecture/`** — Architecture, directory layout, naming, state machine, P0-P4 phasing (MANDATORY)
 - **`io-uring-patterns/`** — SQE/CQE patterns, provided buffers, multishot, linked timeouts, zero-copy, REGISTER_RESTRICTIONS (MANDATORY for src/core/, src/net/)
 - **`wolfssl-iohttp/`** — wolfSSL I/O callbacks, non-blocking TLS, ALPN/SNI, mTLS, QUIC crypto, I/O serialization (MANDATORY for src/tls/)
+- **`rfc-reference/`** — RFC index with key sections, priority map, protocol implementation notes
 
 ## MCP Documentation (context7)
 
 Use context7 to fetch up-to-date documentation:
 - wolfSSL API: `/wolfssl/wolfssl`
 - liburing io_uring: `/axboe/liburing`
+- picohttpparser: `/h2o/picohttpparser`
+- nghttp2 HTTP/2: `/nghttp2/nghttp2`
+- ngtcp2 QUIC: `/ngtcp2/ngtcp2`
+- nghttp3 HTTP/3: `/ngtcp2/nghttp3`
+- wslay WebSocket: `/tatsuhiro-t/wslay`
+- sfparse Structured Fields: `/ngtcp2/sfparse`
 - yyjson JSON: `/ibireme/yyjson`
 - CMake build: `/websites/cmake_cmake_help`
+
+## RFC References
+
+Local copies in `docs/rfc/` — see `docs/rfc/README.md` for full index.
+
+**Core (must-read for HTTP implementation):**
+- RFC 9110 — HTTP Semantics
+- RFC 9112 — HTTP/1.1
+- RFC 9113 — HTTP/2
+- RFC 9114 — HTTP/3
+
+**QUIC:**
+- RFC 9000 — QUIC Transport
+- RFC 9001 — QUIC-TLS
+- RFC 9002 — QUIC Loss Detection
+
+**TLS:**
+- RFC 8446 — TLS 1.3
+- RFC 7301 — ALPN
+- RFC 9325 — Secure Use of TLS
+
+**WebSocket:**
+- RFC 6455 — WebSocket Protocol
+- RFC 7692 — WebSocket Compression

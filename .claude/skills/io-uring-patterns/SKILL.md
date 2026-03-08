@@ -243,3 +243,8 @@ Track per-worker:
 - Timeout fires
 - Multishot re-arms
 - ENOBUFS events
+
+## context7 Documentation
+
+Fetch up-to-date liburing API docs:
+- context7 ID: `/axboe/liburing`

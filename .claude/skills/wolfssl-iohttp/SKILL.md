@@ -189,6 +189,16 @@ HTTP response → wolfSSL_write() → cipher_out_buf (owned by TLS layer)
 - Session ticket key rotation
 - `memset_explicit()` for all key material after use (C23), `explicit_bzero()` fallback
 
+## RFC Cross-References
+
+- RFC 8446 — TLS 1.3 (full implementation by wolfSSL)
+- RFC 7301 — ALPN (`wolfSSL_CTX_UseALPN()`)
+- RFC 6066 §3 — SNI (`wolfSSL_CTX_set_servername_callback()`)
+- RFC 6066 §8 — OCSP Stapling (`wolfSSL_CTX_EnableOCSP()`)
+- RFC 9001 — QUIC-TLS (`ngtcp2_crypto_wolfssl`)
+- RFC 9325 — Secure Use of TLS (cipher suite restrictions, min version)
+- RFC 8879 — TLS Certificate Compression
+
 ## wolfSSL License Note
 
 wolfSSL license requires clarification before iohttp release:
