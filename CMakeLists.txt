@@ -361,3 +361,12 @@ if(BUILD_TESTING AND TARGET unity)
     )
     add_test(NAME test_http1_server COMMAND test_http1_server)
 endif()
+
+# ============================================================================
+# Sprint 4: Radix trie (internal)
+# ============================================================================
+
+add_library(io_radix STATIC src/router/io_radix.c)
+target_include_directories(io_radix PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+io_add_test(test_io_radix tests/unit/test_io_radix.c io_radix io_request)
