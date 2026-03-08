@@ -22,36 +22,21 @@ typedef struct {
 } io_mime_entry_t;
 
 static const io_mime_entry_t mime_table[] = {
-    {".html",  5, "text/html"},
-    {".htm",   4, "text/html"},
-    {".css",   4, "text/css"},
-    {".js",    3, "text/javascript"},
-    {".json",  5, "application/json"},
-    {".xml",   4, "application/xml"},
-    {".png",   4, "image/png"},
-    {".jpg",   4, "image/jpeg"},
-    {".jpeg",  5, "image/jpeg"},
-    {".gif",   4, "image/gif"},
-    {".svg",   4, "image/svg+xml"},
-    {".ico",   4, "image/x-icon"},
-    {".webp",  5, "image/webp"},
-    {".avif",  5, "image/avif"},
-    {".woff",  5, "font/woff"},
-    {".woff2", 6, "font/woff2"},
-    {".ttf",   4, "font/ttf"},
-    {".otf",   4, "font/otf"},
-    {".pdf",   4, "application/pdf"},
-    {".zip",   4, "application/zip"},
-    {".gz",    3, "application/gzip"},
-    {".br",    3, "application/x-brotli"},
-    {".wasm",  5, "application/wasm"},
-    {".txt",   4, "text/plain"},
-    {".csv",   4, "text/csv"},
-    {".mp4",   4, "video/mp4"},
-    {".webm",  5, "video/webm"},
-    {".mp3",   4, "audio/mpeg"},
-    {".ogg",   4, "audio/ogg"},
-    {".map",   4, "application/json"},
+    {".html", 5, "text/html"},        {".htm", 4, "text/html"},
+    {".css", 4, "text/css"},          {".js", 3, "text/javascript"},
+    {".json", 5, "application/json"}, {".xml", 4, "application/xml"},
+    {".png", 4, "image/png"},         {".jpg", 4, "image/jpeg"},
+    {".jpeg", 5, "image/jpeg"},       {".gif", 4, "image/gif"},
+    {".svg", 4, "image/svg+xml"},     {".ico", 4, "image/x-icon"},
+    {".webp", 5, "image/webp"},       {".avif", 5, "image/avif"},
+    {".woff", 5, "font/woff"},        {".woff2", 6, "font/woff2"},
+    {".ttf", 4, "font/ttf"},          {".otf", 4, "font/otf"},
+    {".pdf", 4, "application/pdf"},   {".zip", 4, "application/zip"},
+    {".gz", 3, "application/gzip"},   {".br", 3, "application/x-brotli"},
+    {".wasm", 5, "application/wasm"}, {".txt", 4, "text/plain"},
+    {".csv", 4, "text/csv"},          {".mp4", 4, "video/mp4"},
+    {".webm", 5, "video/webm"},       {".mp3", 4, "audio/mpeg"},
+    {".ogg", 4, "audio/ogg"},         {".map", 4, "application/json"},
 };
 
 constexpr size_t MIME_TABLE_SIZE = sizeof(mime_table) / sizeof(mime_table[0]);
@@ -96,8 +81,7 @@ const char *io_mime_type(const char *path, size_t len)
     size_t ext_len = len - (size_t)(dot - path);
 
     for (size_t i = 0; i < MIME_TABLE_SIZE; i++) {
-        if (ext_len == mime_table[i].ext_len &&
-            strncasecmp(dot, mime_table[i].ext, ext_len) == 0) {
+        if (ext_len == mime_table[i].ext_len && strncasecmp(dot, mime_table[i].ext, ext_len) == 0) {
             return mime_table[i].mime;
         }
     }
@@ -113,8 +97,7 @@ int io_etag_generate(uint64_t mtime, uint64_t size, char *buf, size_t buf_size)
         return -ENOSPC;
     }
 
-    int n = snprintf(buf, buf_size, "\"%lx-%lx\"",
-                     (unsigned long)mtime, (unsigned long)size);
+    int n = snprintf(buf, buf_size, "\"%lx-%lx\"", (unsigned long)mtime, (unsigned long)size);
     if (n < 0 || (size_t)n >= buf_size) {
         return -ENOSPC;
     }
@@ -154,8 +137,8 @@ static bool path_is_safe(const char *path, size_t len)
  * Only single ranges are supported.
  * @return 0 on success, -EINVAL on parse error.
  */
-static int parse_range(const char *range_hdr, uint64_t file_size,
-                       uint64_t *out_start, uint64_t *out_end)
+static int parse_range(const char *range_hdr, uint64_t file_size, uint64_t *out_start,
+                       uint64_t *out_end)
 {
     if (range_hdr == nullptr) {
         return -EINVAL;
@@ -209,9 +192,7 @@ static int parse_range(const char *range_hdr, uint64_t file_size,
 
 /* ---- Main serve ---- */
 
-int io_static_serve(const io_static_config_t *cfg,
-                    const io_request_t *req,
-                    io_response_t *resp)
+int io_static_serve(const io_static_config_t *cfg, const io_request_t *req, io_response_t *resp)
 {
     if (cfg == nullptr || req == nullptr || resp == nullptr) {
         return -EINVAL;
@@ -230,8 +211,8 @@ int io_static_serve(const io_static_config_t *cfg,
 
     /* build full path: root_dir + request_path */
     char full_path[PATH_MAX];
-    int n = snprintf(full_path, sizeof(full_path), "%s%.*s",
-                     cfg->root_dir, (int)req->path_len, req->path);
+    int n = snprintf(full_path, sizeof(full_path), "%s%.*s", cfg->root_dir, (int)req->path_len,
+                     req->path);
     if (n < 0 || (size_t)n >= sizeof(full_path)) {
         return -ENAMETOOLONG;
     }
@@ -283,8 +264,7 @@ int io_static_serve(const io_static_config_t *cfg,
         const char *inm = io_request_header(req, "If-None-Match");
         if (inm != nullptr) {
             size_t inm_len = strnlen(inm, IO_MAX_HEADER_SIZE);
-            if (inm_len == (size_t)etag_len &&
-                memcmp(inm, etag_buf, (size_t)etag_len) == 0) {
+            if (inm_len == (size_t)etag_len && memcmp(inm, etag_buf, (size_t)etag_len) == 0) {
                 resp->status = 304;
                 (void)io_response_set_header(resp, "ETag", etag_buf);
                 return 0;
@@ -360,11 +340,8 @@ int io_static_serve(const io_static_config_t *cfg,
         resp->status = 206;
 
         char content_range[128];
-        snprintf(content_range, sizeof(content_range),
-                 "bytes %lu-%lu/%lu",
-                 (unsigned long)range_start,
-                 (unsigned long)range_end,
-                 (unsigned long)file_size);
+        snprintf(content_range, sizeof(content_range), "bytes %lu-%lu/%lu",
+                 (unsigned long)range_start, (unsigned long)range_end, (unsigned long)file_size);
         (void)io_response_set_header(resp, "Content-Range", content_range);
     } else {
         resp->status = 200;
@@ -386,8 +363,7 @@ int io_static_serve(const io_static_config_t *cfg,
     struct tm tm_mtime;
     char lm_buf[64];
     if (gmtime_r((time_t *)&st.st_mtime, &tm_mtime) != nullptr) {
-        if (strftime(lm_buf, sizeof(lm_buf),
-                     "%a, %d %b %Y %H:%M:%S GMT", &tm_mtime) > 0) {
+        if (strftime(lm_buf, sizeof(lm_buf), "%a, %d %b %Y %H:%M:%S GMT", &tm_mtime) > 0) {
             (void)io_response_set_header(resp, "Last-Modified", lm_buf);
         }
     }

@@ -12,12 +12,12 @@
 #include <stdint.h>
 
 typedef struct {
-    const char *root_dir;          /* document root */
-    const char *index_file;        /* default "index.html" */
-    const char **api_prefixes;     /* paths excluded from fallback, e.g. "/api/" */
+    const char *root_dir;      /* document root */
+    const char *index_file;    /* default "index.html" */
+    const char **api_prefixes; /* paths excluded from fallback, e.g. "/api/" */
     uint32_t api_prefix_count;
-    uint32_t max_age_default;      /* for static assets, default 3600 */
-    uint32_t max_age_immutable;    /* for hashed assets, default 31536000 (1 year) */
+    uint32_t max_age_default;   /* for static assets, default 3600 */
+    uint32_t max_age_immutable; /* for hashed assets, default 31536000 (1 year) */
 } io_spa_config_t;
 
 /**
@@ -34,8 +34,7 @@ void io_spa_config_init(io_spa_config_t *cfg);
  * @param resp  HTTP response to populate.
  * @return 0 on success, -ENOENT if API prefix or missing file with extension, <0 on error.
  */
-[[nodiscard]] int io_spa_serve(const io_spa_config_t *cfg,
-                               const io_request_t *req,
+[[nodiscard]] int io_spa_serve(const io_spa_config_t *cfg, const io_request_t *req,
                                io_response_t *resp);
 
 /**

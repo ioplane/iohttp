@@ -17,11 +17,11 @@
 #include <sys/stat.h>
 
 #ifdef IOHTTP_HAVE_ZLIB
-#include <zlib.h>
+#    include <zlib.h>
 #endif
 
 #ifdef IOHTTP_HAVE_BROTLI
-#include <brotli/encode.h>
+#    include <brotli/encode.h>
 #endif
 
 /* ---- Config defaults ---- */
@@ -45,13 +45,11 @@ void io_compress_config_init(io_compress_config_t *cfg)
  * Parse a single encoding token and its q-value from a comma-separated list.
  * Advances *pos past the token (and trailing comma/whitespace).
  */
-static bool parse_encoding_token(const char *header, size_t len, size_t *pos,
-                                 const char **token, size_t *token_len,
-                                 double *qvalue)
+static bool parse_encoding_token(const char *header, size_t len, size_t *pos, const char **token,
+                                 size_t *token_len, double *qvalue)
 {
     /* skip leading whitespace and commas */
-    while (*pos < len && (header[*pos] == ' ' || header[*pos] == ','
-                          || header[*pos] == '\t')) {
+    while (*pos < len && (header[*pos] == ' ' || header[*pos] == ',' || header[*pos] == '\t')) {
         (*pos)++;
     }
     if (*pos >= len) {
@@ -61,8 +59,8 @@ static bool parse_encoding_token(const char *header, size_t len, size_t *pos,
     /* extract token name */
     *token = &header[*pos];
     size_t start = *pos;
-    while (*pos < len && header[*pos] != ',' && header[*pos] != ';'
-           && header[*pos] != ' ' && header[*pos] != '\t') {
+    while (*pos < len && header[*pos] != ',' && header[*pos] != ';' && header[*pos] != ' ' &&
+           header[*pos] != '\t') {
         (*pos)++;
     }
     *token_len = *pos - start;
@@ -78,13 +76,13 @@ static bool parse_encoding_token(const char *header, size_t len, size_t *pos,
         while (*pos < len && (header[*pos] == ' ' || header[*pos] == '\t')) {
             (*pos)++;
         }
-        if (*pos + 1 < len && (header[*pos] == 'q' || header[*pos] == 'Q')
-            && header[*pos + 1] == '=') {
+        if (*pos + 1 < len && (header[*pos] == 'q' || header[*pos] == 'Q') &&
+            header[*pos + 1] == '=') {
             *pos += 2;
             char buf[16];
             size_t bi = 0;
-            while (*pos < len && header[*pos] != ',' && header[*pos] != ' '
-                   && bi < sizeof(buf) - 1) {
+            while (*pos < len && header[*pos] != ',' && header[*pos] != ' ' &&
+                   bi < sizeof(buf) - 1) {
                 buf[bi++] = header[(*pos)++];
             }
             buf[bi] = '\0';
@@ -118,16 +116,14 @@ io_encoding_t io_compress_negotiate(const char *accept_encoding)
     size_t token_len = 0;
     double qvalue = 1.0;
 
-    while (parse_encoding_token(accept_encoding, len, &pos,
-                                &token, &token_len, &qvalue)) {
+    while (parse_encoding_token(accept_encoding, len, &pos, &token, &token_len, &qvalue)) {
         if (token_len == 4 && strncasecmp(token, "gzip", 4) == 0) {
             gzip_q = qvalue;
         } else if (token_len == 2 && strncasecmp(token, "br", 2) == 0) {
             br_q = qvalue;
         } else if (token_len == 1 && token[0] == '*') {
             star_q = qvalue;
-        } else if (token_len == 8
-                   && strncasecmp(token, "identity", 8) == 0) {
+        } else if (token_len == 8 && strncasecmp(token, "identity", 8) == 0) {
             if (qvalue == 0.0) {
                 identity_excluded = true;
             }
@@ -166,8 +162,8 @@ io_encoding_t io_compress_negotiate(const char *accept_encoding)
 
 /* ---- Precompressed file detection ---- */
 
-bool io_compress_precompressed(const char *path, io_encoding_t encoding,
-                               char *out_path, size_t out_size)
+bool io_compress_precompressed(const char *path, io_encoding_t encoding, char *out_path,
+                               size_t out_size)
 {
     if (path == nullptr || out_path == nullptr || out_size == 0) {
         return false;
@@ -197,8 +193,8 @@ bool io_compress_precompressed(const char *path, io_encoding_t encoding,
 /* ---- Dynamic compression ---- */
 
 #ifdef IOHTTP_HAVE_ZLIB
-static int compress_gzip(const uint8_t *in, size_t in_len, int level,
-                         uint8_t **out, size_t *out_len)
+static int compress_gzip(const uint8_t *in, size_t in_len, int level, uint8_t **out,
+                         size_t *out_len)
 {
     /* worst case: deflateBound */
     uLong bound = deflateBound(nullptr, (uLong)in_len);
@@ -211,8 +207,7 @@ static int compress_gzip(const uint8_t *in, size_t in_len, int level,
     memset(&strm, 0, sizeof(strm));
 
     /* MAX_WBITS + 16 = gzip format */
-    int ret = deflateInit2(&strm, level, Z_DEFLATED, MAX_WBITS + 16, 8,
-                           Z_DEFAULT_STRATEGY);
+    int ret = deflateInit2(&strm, level, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
     if (ret != Z_OK) {
         free(buf);
         return -EIO;
@@ -238,8 +233,8 @@ static int compress_gzip(const uint8_t *in, size_t in_len, int level,
 #endif /* IOHTTP_HAVE_ZLIB */
 
 #ifdef IOHTTP_HAVE_BROTLI
-static int compress_brotli(const uint8_t *in, size_t in_len, int quality,
-                           uint8_t **out, size_t *out_len)
+static int compress_brotli(const uint8_t *in, size_t in_len, int quality, uint8_t **out,
+                           size_t *out_len)
 {
     size_t max_len = BrotliEncoderMaxCompressedSize(in_len);
     if (max_len == 0) {
@@ -251,9 +246,8 @@ static int compress_brotli(const uint8_t *in, size_t in_len, int quality,
     }
 
     size_t encoded_size = max_len;
-    BROTLI_BOOL ok = BrotliEncoderCompress(
-        quality, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE,
-        in_len, in, &encoded_size, buf);
+    BROTLI_BOOL ok = BrotliEncoderCompress(quality, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE,
+                                           in_len, in, &encoded_size, buf);
     if (!ok) {
         free(buf);
         return -EIO;
@@ -265,8 +259,7 @@ static int compress_brotli(const uint8_t *in, size_t in_len, int quality,
 }
 #endif /* IOHTTP_HAVE_BROTLI */
 
-int io_compress_response(const io_compress_config_t *cfg,
-                         const io_request_t *req,
+int io_compress_response(const io_compress_config_t *cfg, const io_request_t *req,
                          io_response_t *resp)
 {
     if (cfg == nullptr || req == nullptr || resp == nullptr) {
@@ -296,8 +289,8 @@ int io_compress_response(const io_compress_config_t *cfg,
 
     if (enc == IO_ENCODING_GZIP && cfg->enable_gzip) {
 #ifdef IOHTTP_HAVE_ZLIB
-        rc = compress_gzip(resp->body, resp->body_len, cfg->gzip_level,
-                           &compressed, &compressed_len);
+        rc = compress_gzip(resp->body, resp->body_len, cfg->gzip_level, &compressed,
+                           &compressed_len);
         if (rc < 0) {
             return rc;
         }
@@ -307,8 +300,8 @@ int io_compress_response(const io_compress_config_t *cfg,
 #endif
     } else if (enc == IO_ENCODING_BROTLI && cfg->enable_brotli) {
 #ifdef IOHTTP_HAVE_BROTLI
-        rc = compress_brotli(resp->body, resp->body_len, cfg->brotli_quality,
-                             &compressed, &compressed_len);
+        rc = compress_brotli(resp->body, resp->body_len, cfg->brotli_quality, &compressed,
+                             &compressed_len);
         if (rc < 0) {
             return rc;
         }

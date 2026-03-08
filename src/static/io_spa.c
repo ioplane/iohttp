@@ -34,9 +34,7 @@ void io_spa_config_init(io_spa_config_t *cfg)
  */
 static bool is_hex(char c)
 {
-    return (c >= '0' && c <= '9') ||
-           (c >= 'a' && c <= 'f') ||
-           (c >= 'A' && c <= 'F');
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
 /**
@@ -46,8 +44,7 @@ static bool is_api_path(const io_spa_config_t *cfg, const char *path, size_t pat
 {
     for (uint32_t i = 0; i < cfg->api_prefix_count; i++) {
         size_t prefix_len = strnlen(cfg->api_prefixes[i], IO_MAX_URI_SIZE);
-        if (path_len >= prefix_len &&
-            strncmp(path, cfg->api_prefixes[i], prefix_len) == 0) {
+        if (path_len >= prefix_len && strncmp(path, cfg->api_prefixes[i], prefix_len) == 0) {
             return true;
         }
     }
@@ -147,9 +144,7 @@ bool io_spa_is_hashed_asset(const char *path, size_t path_len)
 
 /* ---- Main serve ---- */
 
-int io_spa_serve(const io_spa_config_t *cfg,
-                 const io_request_t *req,
-                 io_response_t *resp)
+int io_spa_serve(const io_spa_config_t *cfg, const io_request_t *req, io_response_t *resp)
 {
     if (cfg == nullptr || req == nullptr || resp == nullptr) {
         return -EINVAL;
@@ -168,8 +163,8 @@ int io_spa_serve(const io_spa_config_t *cfg,
 
     /* 2. build full path and check if file exists */
     char full_path[PATH_MAX];
-    int n = snprintf(full_path, sizeof(full_path), "%s%.*s",
-                     cfg->root_dir, (int)req->path_len, req->path);
+    int n = snprintf(full_path, sizeof(full_path), "%s%.*s", cfg->root_dir, (int)req->path_len,
+                     req->path);
     if (n < 0 || (size_t)n >= sizeof(full_path)) {
         return -ENAMETOOLONG;
     }
@@ -192,8 +187,8 @@ int io_spa_serve(const io_spa_config_t *cfg,
         /* override Cache-Control for hashed assets */
         if (io_spa_is_hashed_asset(req->path, req->path_len)) {
             char cc_buf[80];
-            snprintf(cc_buf, sizeof(cc_buf),
-                     "public, max-age=%u, immutable", cfg->max_age_immutable);
+            snprintf(cc_buf, sizeof(cc_buf), "public, max-age=%u, immutable",
+                     cfg->max_age_immutable);
             (void)io_response_set_header(resp, "Cache-Control", cc_buf);
         }
 

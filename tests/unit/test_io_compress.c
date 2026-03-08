@@ -31,8 +31,7 @@ static const char *resp_header(const io_response_t *resp, const char *name)
     return nullptr;
 }
 
-static void set_request_header(io_request_t *req, const char *name,
-                               const char *value)
+static void set_request_header(io_request_t *req, const char *name, const char *value)
 {
     uint32_t idx = req->header_count;
     req->headers[idx].name = name;
@@ -111,8 +110,7 @@ void test_compress_negotiate_qvalue(void)
 void test_compress_precompressed_gz(void)
 {
     char out[512];
-    bool found = io_compress_precompressed(tmp_file, IO_ENCODING_GZIP,
-                                           out, sizeof(out));
+    bool found = io_compress_precompressed(tmp_file, IO_ENCODING_GZIP, out, sizeof(out));
     TEST_ASSERT_TRUE(found);
     TEST_ASSERT_EQUAL_STRING(tmp_gz, out);
 }
@@ -120,8 +118,7 @@ void test_compress_precompressed_gz(void)
 void test_compress_precompressed_br(void)
 {
     char out[512];
-    bool found = io_compress_precompressed(tmp_file, IO_ENCODING_BROTLI,
-                                           out, sizeof(out));
+    bool found = io_compress_precompressed(tmp_file, IO_ENCODING_BROTLI, out, sizeof(out));
     TEST_ASSERT_TRUE(found);
     TEST_ASSERT_EQUAL_STRING(tmp_br, out);
 }
@@ -144,8 +141,7 @@ void test_compress_below_min_size(void)
 
     /* set a small body (below min_size) */
     const char *small = "hello world";
-    rc = io_response_set_body(&resp, (const uint8_t *)small,
-                              strlen(small));
+    rc = io_response_set_body(&resp, (const uint8_t *)small, strlen(small));
     TEST_ASSERT_EQUAL(0, rc);
 
     rc = io_compress_response(&cfg, &req, &resp);

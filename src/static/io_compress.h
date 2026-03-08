@@ -51,8 +51,7 @@ io_encoding_t io_compress_negotiate(const char *accept_encoding);
  * @param resp Response to compress.
  * @return 0 on success (or skipped), <0 on error.
  */
-[[nodiscard]] int io_compress_response(const io_compress_config_t *cfg,
-                                       const io_request_t *req,
+[[nodiscard]] int io_compress_response(const io_compress_config_t *cfg, const io_request_t *req,
                                        io_response_t *resp);
 
 /**
@@ -63,7 +62,7 @@ io_encoding_t io_compress_negotiate(const char *accept_encoding);
  * @param out_size  Buffer size.
  * @return true if precompressed file exists.
  */
-bool io_compress_precompressed(const char *path, io_encoding_t encoding,
-                               char *out_path, size_t out_size);
+bool io_compress_precompressed(const char *path, io_encoding_t encoding, char *out_path,
+                               size_t out_size);
 
 #endif /* IOHTTP_STATIC_COMPRESS_H */

@@ -13,10 +13,10 @@
 #include <stdint.h>
 
 typedef struct {
-    const char *root_dir;          /* document root */
-    bool directory_listing;        /* default false */
-    bool etag;                     /* ETag generation, default true */
-    uint32_t max_age_default;      /* Cache-Control max-age in seconds, default 3600 */
+    const char *root_dir;     /* document root */
+    bool directory_listing;   /* default false */
+    bool etag;                /* ETag generation, default true */
+    uint32_t max_age_default; /* Cache-Control max-age in seconds, default 3600 */
 } io_static_config_t;
 
 /**
@@ -32,8 +32,7 @@ void io_static_config_init(io_static_config_t *cfg);
  * @param resp  HTTP response to populate.
  * @return 0 on success, -ENOENT if file not found, -EACCES for path traversal, <0 on error.
  */
-[[nodiscard]] int io_static_serve(const io_static_config_t *cfg,
-                                  const io_request_t *req,
+[[nodiscard]] int io_static_serve(const io_static_config_t *cfg, const io_request_t *req,
                                   io_response_t *resp);
 
 /**
@@ -52,7 +51,6 @@ const char *io_mime_type(const char *path, size_t len);
  * @param buf_size  Buffer size (at least 32 bytes).
  * @return Bytes written, or -ENOSPC.
  */
-[[nodiscard]] int io_etag_generate(uint64_t mtime, uint64_t size,
-                                   char *buf, size_t buf_size);
+[[nodiscard]] int io_etag_generate(uint64_t mtime, uint64_t size, char *buf, size_t buf_size);
 
 #endif /* IOHTTP_STATIC_STATIC_H */

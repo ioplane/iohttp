@@ -12,19 +12,19 @@
 #include <stdint.h>
 
 typedef struct {
-    const char *name;         /* form field name */
+    const char *name; /* form field name */
     size_t name_len;
-    const char *filename;     /* original filename (nullptr if not file) */
+    const char *filename; /* original filename (nullptr if not file) */
     size_t filename_len;
     const char *content_type; /* part content-type (nullptr if not specified) */
     size_t content_type_len;
-    const uint8_t *data;      /* part body (zero-copy pointer into request body) */
+    const uint8_t *data; /* part body (zero-copy pointer into request body) */
     size_t data_len;
 } io_multipart_part_t;
 
 typedef struct {
-    uint32_t max_parts;   /* default 64 */
-    size_t max_part_size; /* default 10MB */
+    uint32_t max_parts;    /* default 64 */
+    size_t max_part_size;  /* default 10MB */
     size_t max_total_size; /* default 50MB */
 } io_multipart_config_t;
 
@@ -45,8 +45,7 @@ void io_multipart_config_init(io_multipart_config_t *cfg);
  * @param boundary_len Output boundary length.
  * @return 0 on success, -EINVAL if not multipart or boundary missing.
  */
-[[nodiscard]] int io_multipart_boundary(const char *content_type,
-                                        const char **boundary,
+[[nodiscard]] int io_multipart_boundary(const char *content_type, const char **boundary,
                                         size_t *boundary_len);
 
 /**
@@ -60,11 +59,8 @@ void io_multipart_config_init(io_multipart_config_t *cfg);
  * @param part_count   Input: max parts array size. Output: actual parts parsed.
  * @return 0 on success, -EINVAL malformed, -E2BIG too many/large parts.
  */
-[[nodiscard]] int io_multipart_parse(const uint8_t *body, size_t body_len,
-                                     const char *boundary,
-                                     size_t boundary_len,
-                                     const io_multipart_config_t *cfg,
-                                     io_multipart_part_t *parts,
-                                     uint32_t *part_count);
+[[nodiscard]] int io_multipart_parse(const uint8_t *body, size_t body_len, const char *boundary,
+                                     size_t boundary_len, const io_multipart_config_t *cfg,
+                                     io_multipart_part_t *parts, uint32_t *part_count);
 
 #endif /* IOHTTP_HTTP_MULTIPART_H */

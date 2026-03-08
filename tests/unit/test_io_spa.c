@@ -74,8 +74,7 @@ static void init_request(io_request_t *req, const char *path)
 static const char *find_header(const io_response_t *resp, const char *name)
 {
     for (uint32_t i = 0; i < resp->header_count; i++) {
-        if (strncasecmp(resp->headers[i].name, name,
-                        resp->headers[i].name_len) == 0) {
+        if (strncasecmp(resp->headers[i].name, name, resp->headers[i].name_len) == 0) {
             return resp->headers[i].value;
         }
     }
