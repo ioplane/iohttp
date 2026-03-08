@@ -307,6 +307,18 @@ void test_http1_require_host_11(void)
     TEST_ASSERT_EQUAL_INT(-EINVAL, rc);
 }
 
+void test_http1_reject_chunked_not_last(void)
+{
+    const char *raw = "POST /x HTTP/1.1\r\n"
+                      "Host: localhost\r\n"
+                      "Transfer-Encoding: chunked, gzip\r\n"
+                      "\r\n";
+    io_request_t req;
+
+    int rc = io_http1_parse_request((const uint8_t *)raw, strlen(raw), &req);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, rc);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -330,6 +342,7 @@ int main(void)
     RUN_TEST(test_http1_reject_cl_and_te);
     RUN_TEST(test_http1_reject_obs_fold);
     RUN_TEST(test_http1_reject_bad_cl_value);
+    RUN_TEST(test_http1_reject_chunked_not_last);
     RUN_TEST(test_http1_require_host_11);
 
     return UNITY_END();
