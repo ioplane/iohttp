@@ -56,8 +56,7 @@ void io_response_destroy(io_response_t *resp);
  * @param value Header value.
  * @return 0 on success, -EINVAL on bad input, -ENOMEM on allocation failure.
  */
-[[nodiscard]] int io_response_set_header(io_response_t *resp, const char *name,
-                                         const char *value);
+[[nodiscard]] int io_response_set_header(io_response_t *resp, const char *name, const char *value);
 
 /**
  * @brief Set the response body (copies data).
@@ -66,8 +65,7 @@ void io_response_destroy(io_response_t *resp);
  * @param len  Body length in bytes.
  * @return 0 on success, -EINVAL on bad input, -ENOMEM on allocation failure.
  */
-[[nodiscard]] int io_response_set_body(io_response_t *resp, const uint8_t *body,
-                                       size_t len);
+[[nodiscard]] int io_response_set_body(io_response_t *resp, const uint8_t *body, size_t len);
 
 /* ---- Convenience builders ---- */
 
@@ -80,9 +78,8 @@ void io_response_destroy(io_response_t *resp);
  * @param body_len     Body length in bytes.
  * @return 0 on success, negative errno on failure.
  */
-[[nodiscard]] int io_respond(io_response_t *resp, uint16_t status,
-                             const char *content_type, const uint8_t *body,
-                             size_t body_len);
+[[nodiscard]] int io_respond(io_response_t *resp, uint16_t status, const char *content_type,
+                             const uint8_t *body, size_t body_len);
 
 /**
  * @brief Convenience for JSON responses.
@@ -91,8 +88,7 @@ void io_response_destroy(io_response_t *resp);
  * @param json   NUL-terminated JSON string.
  * @return 0 on success, negative errno on failure.
  */
-[[nodiscard]] int io_respond_json(io_response_t *resp, uint16_t status,
-                                  const char *json);
+[[nodiscard]] int io_respond_json(io_response_t *resp, uint16_t status, const char *json);
 
 /* ---- Status text ---- */
 

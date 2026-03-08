@@ -108,8 +108,7 @@ void test_http1_parse_oversized_uri(void)
     memcpy(raw + 5 + 4200, suffix, strlen(suffix) + 1);
 
     io_request_t req;
-    int rc = io_http1_parse_request((const uint8_t *)raw,
-                                     5 + 4200 + strlen(suffix), &req);
+    int rc = io_http1_parse_request((const uint8_t *)raw, 5 + 4200 + strlen(suffix), &req);
     TEST_ASSERT_EQUAL_INT(-E2BIG, rc);
 }
 
@@ -118,12 +117,10 @@ void test_http1_parse_oversized_headers(void)
     /* Build a request with more headers than IO_HTTP1_MAX_HEADERS (64) */
     char raw[32768];
     int pos = 0;
-    pos += snprintf(raw + pos, sizeof(raw) - (size_t)pos,
-                    "GET / HTTP/1.1\r\nHost: localhost\r\n");
+    pos += snprintf(raw + pos, sizeof(raw) - (size_t)pos, "GET / HTTP/1.1\r\nHost: localhost\r\n");
 
     for (int i = 0; i < 65; i++) {
-        pos += snprintf(raw + pos, sizeof(raw) - (size_t)pos,
-                        "X-H%d: v%d\r\n", i, i);
+        pos += snprintf(raw + pos, sizeof(raw) - (size_t)pos, "X-H%d: v%d\r\n", i, i);
     }
     pos += snprintf(raw + pos, sizeof(raw) - (size_t)pos, "\r\n");
 

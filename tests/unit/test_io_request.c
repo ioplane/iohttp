@@ -92,12 +92,16 @@ void test_request_header_find(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Content-Type", .name_len = 12,
-        .value = "text/html", .value_len = 9,
+        .name = "Content-Type",
+        .name_len = 12,
+        .value = "text/html",
+        .value_len = 9,
     };
     req.headers[1] = (io_header_t){
-        .name = "X-Custom", .name_len = 8,
-        .value = "foobar", .value_len = 6,
+        .name = "X-Custom",
+        .name_len = 8,
+        .value = "foobar",
+        .value_len = 6,
     };
     req.header_count = 2;
 
@@ -114,8 +118,10 @@ void test_request_header_find_missing(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Host", .name_len = 4,
-        .value = "example.com", .value_len = 11,
+        .name = "Host",
+        .name_len = 4,
+        .value = "example.com",
+        .value_len = 11,
     };
     req.header_count = 1;
 
@@ -158,8 +164,10 @@ void test_request_cookie_single(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Cookie", .name_len = 6,
-        .value = "session=abc123", .value_len = 14,
+        .name = "Cookie",
+        .name_len = 6,
+        .value = "session=abc123",
+        .value_len = 14,
     };
     req.header_count = 1;
 
@@ -174,8 +182,10 @@ void test_request_cookie_multiple(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Cookie", .name_len = 6,
-        .value = "a=1; b=2; session=xyz", .value_len = 21,
+        .name = "Cookie",
+        .name_len = 6,
+        .value = "a=1; b=2; session=xyz",
+        .value_len = 21,
     };
     req.header_count = 1;
 
@@ -198,8 +208,10 @@ void test_request_cookie_missing(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Cookie", .name_len = 6,
-        .value = "a=1; b=2", .value_len = 8,
+        .name = "Cookie",
+        .name_len = 6,
+        .value = "a=1; b=2",
+        .value_len = 8,
     };
     req.header_count = 1;
 
@@ -242,8 +254,10 @@ void test_request_accepts_json(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Accept", .name_len = 6,
-        .value = "application/json, text/html", .value_len = 27,
+        .name = "Accept",
+        .name_len = 6,
+        .value = "application/json, text/html",
+        .value_len = 27,
     };
     req.header_count = 1;
 
@@ -259,8 +273,10 @@ void test_request_accepts_wildcard(void)
     io_request_init(&req);
 
     req.headers[0] = (io_header_t){
-        .name = "Accept", .name_len = 6,
-        .value = "*/*", .value_len = 3,
+        .name = "Accept",
+        .name_len = 6,
+        .value = "*/*",
+        .value_len = 3,
     };
     req.header_count = 1;
 

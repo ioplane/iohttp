@@ -132,7 +132,6 @@ const char *io_request_query_param(const io_request_t *req, const char *name);
  * @param count Number of types in array.
  * @return Best matching type string, or nullptr if none match.
  */
-const char *io_request_accepts(const io_request_t *req, const char **types,
-                               uint32_t count);
+const char *io_request_accepts(const io_request_t *req, const char **types, uint32_t count);
 
 #endif /* IOHTTP_HTTP_REQUEST_H */

@@ -17,11 +17,13 @@
  */
 static bool is_valid_content_length(const char *value, size_t len)
 {
-    if (len == 0)
+    if (len == 0) {
         return false;
+    }
     for (size_t i = 0; i < len; i++) {
-        if (value[i] < '0' || value[i] > '9')
+        if (value[i] < '0' || value[i] > '9') {
             return false;
+        }
     }
     return true;
 }
@@ -33,18 +35,21 @@ static bool is_valid_content_length(const char *value, size_t len)
 static size_t parse_content_length(const char *value, size_t len)
 {
     size_t result = 0;
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++) {
         result = result * 10 + (size_t)(value[i] - '0');
+    }
     return result;
 }
 
 int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
 {
-    if (buf == nullptr || req == nullptr)
+    if (buf == nullptr || req == nullptr) {
         return -EINVAL;
+    }
 
-    if (len == 0)
+    if (len == 0) {
         return -EAGAIN;
+    }
 
     const char *method = nullptr;
     size_t method_len = 0;
@@ -54,24 +59,25 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
     struct phr_header headers[IO_HTTP1_MAX_HEADERS];
     size_t num_headers = IO_HTTP1_MAX_HEADERS;
 
-    int rc = phr_parse_request((const char *)buf, len,
-                               &method, &method_len,
-                               &path, &path_len,
-                               &minor_version,
-                               headers, &num_headers, 0);
+    int rc = phr_parse_request((const char *)buf, len, &method, &method_len, &path, &path_len,
+                               &minor_version, headers, &num_headers, 0);
 
-    if (rc == -2)
+    if (rc == -2) {
         return -EAGAIN;
-    if (rc == -1)
+    }
+    if (rc == -1) {
         return -EINVAL;
+    }
 
     /* Check URI size limit */
-    if (path_len > IO_HTTP1_MAX_URI_SIZE)
+    if (path_len > IO_HTTP1_MAX_URI_SIZE) {
         return -E2BIG;
+    }
 
     /* Check header count limit */
-    if (num_headers > IO_HTTP1_MAX_HEADERS)
+    if (num_headers > IO_HTTP1_MAX_HEADERS) {
         return -E2BIG;
+    }
 
     /* Initialize request */
     io_request_init(req);
@@ -108,8 +114,9 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
 
     for (size_t i = 0; i < num_headers; i++) {
         /* obs-fold: name==NULL means continuation line */
-        if (headers[i].name == nullptr)
+        if (headers[i].name == nullptr) {
             return -EINVAL;
+        }
 
         size_t nlen = headers[i].name_len;
         const char *name = headers[i].name;
@@ -118,13 +125,15 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
 
         if (nlen == 14 && strncasecmp(name, "Content-Length", 14) == 0) {
             /* Reject duplicate Content-Length */
-            if (has_content_length)
+            if (has_content_length) {
                 return -EINVAL;
+            }
             has_content_length = true;
 
             /* Reject non-digit characters in Content-Length */
-            if (!is_valid_content_length(value, vlen))
+            if (!is_valid_content_length(value, vlen)) {
                 return -EINVAL;
+            }
 
             req->content_length = parse_content_length(value, vlen);
         }
@@ -151,30 +160,36 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
                     /* chunked must be at the end (after trimming whitespace) */
                     const char *after = found + chunked_len;
                     const char *vend = value + vlen;
-                    while (after < vend && (*after == ' ' || *after == '\t'))
+                    while (after < vend && (*after == ' ' || *after == '\t')) {
                         after++;
-                    if (after != vend)
+                    }
+                    if (after != vend) {
                         return -EINVAL;
+                    }
                 }
             }
         }
 
-        if (nlen == 4 && strncasecmp(name, "Host", 4) == 0)
+        if (nlen == 4 && strncasecmp(name, "Host", 4) == 0) {
             has_host = true;
+        }
     }
 
     /* Reject requests with both Content-Length and Transfer-Encoding */
-    if (has_content_length && has_transfer_encoding)
+    if (has_content_length && has_transfer_encoding) {
         return -EINVAL;
+    }
 
     /* Require Host header for HTTP/1.1 */
-    if (minor_version >= 1 && !has_host)
+    if (minor_version >= 1 && !has_host) {
         return -EINVAL;
+    }
 
     /* Copy headers to request and extract special headers */
     for (size_t i = 0; i < num_headers; i++) {
-        if (i >= IO_MAX_HEADERS)
+        if (i >= IO_MAX_HEADERS) {
             break;
+        }
 
         req->headers[i].name = headers[i].name;
         req->headers[i].name_len = headers[i].name_len;
@@ -187,20 +202,20 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
         const char *value = headers[i].value;
 
         /* Extract Content-Type */
-        if (nlen == 12 && strncasecmp(name, "Content-Type", 12) == 0)
+        if (nlen == 12 && strncasecmp(name, "Content-Type", 12) == 0) {
             req->content_type = value;
+        }
 
         /* Extract Host */
-        if (nlen == 4 && strncasecmp(name, "Host", 4) == 0)
+        if (nlen == 4 && strncasecmp(name, "Host", 4) == 0) {
             req->host = value;
+        }
 
         /* Check Connection header for keep-alive override */
         if (nlen == 10 && strncasecmp(name, "Connection", 10) == 0) {
-            if (headers[i].value_len == 5 &&
-                strncasecmp(value, "close", 5) == 0) {
+            if (headers[i].value_len == 5 && strncasecmp(value, "close", 5) == 0) {
                 req->keep_alive = false;
-            } else if (headers[i].value_len == 10 &&
-                       strncasecmp(value, "keep-alive", 10) == 0) {
+            } else if (headers[i].value_len == 10 && strncasecmp(value, "keep-alive", 10) == 0) {
                 req->keep_alive = true;
             }
         }
@@ -209,11 +224,11 @@ int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req)
     return rc;
 }
 
-int io_http1_serialize_response(const io_response_t *resp,
-                                 uint8_t *buf, size_t buf_size)
+int io_http1_serialize_response(const io_response_t *resp, uint8_t *buf, size_t buf_size)
 {
-    if (resp == nullptr || buf == nullptr || buf_size == 0)
+    if (resp == nullptr || buf == nullptr || buf_size == 0) {
         return -EINVAL;
+    }
 
     const char *status_text = io_status_text(resp->status);
     char *out = (char *)buf;
@@ -221,47 +236,48 @@ int io_http1_serialize_response(const io_response_t *resp,
     int written = 0;
 
     /* Status line: HTTP/1.1 STATUS TEXT\r\n */
-    written = snprintf(out, remaining, "HTTP/1.1 %u %s\r\n",
-                       resp->status, status_text);
-    if (written < 0 || (size_t)written >= remaining)
+    written = snprintf(out, remaining, "HTTP/1.1 %u %s\r\n", resp->status, status_text);
+    if (written < 0 || (size_t)written >= remaining) {
         return -ENOSPC;
+    }
     out += written;
     remaining -= (size_t)written;
 
     /* Headers */
     for (uint32_t i = 0; i < resp->header_count; i++) {
-        written = snprintf(out, remaining, "%.*s: %.*s\r\n",
-                           (int)resp->headers[i].name_len,
-                           resp->headers[i].name,
-                           (int)resp->headers[i].value_len,
+        written = snprintf(out, remaining, "%.*s: %.*s\r\n", (int)resp->headers[i].name_len,
+                           resp->headers[i].name, (int)resp->headers[i].value_len,
                            resp->headers[i].value);
-        if (written < 0 || (size_t)written >= remaining)
+        if (written < 0 || (size_t)written >= remaining) {
             return -ENOSPC;
+        }
         out += written;
         remaining -= (size_t)written;
     }
 
     /* Auto-add Content-Length if body present and not chunked */
     if (resp->body_len > 0 && !resp->chunked) {
-        written = snprintf(out, remaining, "Content-Length: %zu\r\n",
-                           resp->body_len);
-        if (written < 0 || (size_t)written >= remaining)
+        written = snprintf(out, remaining, "Content-Length: %zu\r\n", resp->body_len);
+        if (written < 0 || (size_t)written >= remaining) {
             return -ENOSPC;
+        }
         out += written;
         remaining -= (size_t)written;
     }
 
     /* Header/body separator */
-    if (remaining < 2)
+    if (remaining < 2) {
         return -ENOSPC;
+    }
     memcpy(out, "\r\n", 2);
     out += 2;
     remaining -= 2;
 
     /* Body */
     if (resp->body_len > 0 && resp->body != nullptr) {
-        if (resp->body_len > remaining)
+        if (resp->body_len > remaining) {
             return -ENOSPC;
+        }
         memcpy(out, resp->body, resp->body_len);
         out += resp->body_len;
     }
@@ -271,24 +287,27 @@ int io_http1_serialize_response(const io_response_t *resp,
 
 void io_http1_chunked_init(io_chunked_decoder_t *dec)
 {
-    if (dec == nullptr)
+    if (dec == nullptr) {
         return;
+    }
     memset(dec, 0, sizeof(*dec));
     dec->decoder.consume_trailer = 1;
     dec->consume_trailer = true;
 }
 
-int io_http1_chunked_decode(io_chunked_decoder_t *dec,
-                             uint8_t *buf, size_t *len)
+int io_http1_chunked_decode(io_chunked_decoder_t *dec, uint8_t *buf, size_t *len)
 {
-    if (dec == nullptr || buf == nullptr || len == nullptr)
+    if (dec == nullptr || buf == nullptr || len == nullptr) {
         return -EINVAL;
+    }
 
     ssize_t rc = phr_decode_chunked(&dec->decoder, (char *)buf, len);
 
-    if (rc >= 0)
+    if (rc >= 0) {
         return (int)rc; /* complete, rc = trailing bytes */
-    if (rc == -2)
+    }
+    if (rc == -2) {
         return -EAGAIN; /* need more data */
-    return -EINVAL;      /* error */
+    }
+    return -EINVAL; /* error */
 }

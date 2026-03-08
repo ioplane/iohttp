@@ -33,8 +33,7 @@ typedef struct {
  * @return >0 bytes consumed, -EAGAIN need more data, <0 error
  *         (-EINVAL malformed, -E2BIG too large).
  */
-[[nodiscard]] int io_http1_parse_request(const uint8_t *buf, size_t len,
-                                          io_request_t *req);
+[[nodiscard]] int io_http1_parse_request(const uint8_t *buf, size_t len, io_request_t *req);
 
 /**
  * Serialize HTTP/1.1 response to buffer.
@@ -43,8 +42,8 @@ typedef struct {
  * @param buf_size Size of output buffer.
  * @return >0 bytes written, -ENOSPC buffer too small, <0 error.
  */
-[[nodiscard]] int io_http1_serialize_response(const io_response_t *resp,
-                                               uint8_t *buf, size_t buf_size);
+[[nodiscard]] int io_http1_serialize_response(const io_response_t *resp, uint8_t *buf,
+                                              size_t buf_size);
 
 /**
  * Initialize chunked decoder.
@@ -59,7 +58,6 @@ void io_http1_chunked_init(io_chunked_decoder_t *dec);
  * @param len In: bytes available, Out: bytes decoded.
  * @return >0 complete (trailing bytes), -EAGAIN need more, -EINVAL error.
  */
-[[nodiscard]] int io_http1_chunked_decode(io_chunked_decoder_t *dec,
-                                           uint8_t *buf, size_t *len);
+[[nodiscard]] int io_http1_chunked_decode(io_chunked_decoder_t *dec, uint8_t *buf, size_t *len);
 
 #endif /* IOHTTP_HTTP_HTTP1_H */
