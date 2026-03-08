@@ -535,9 +535,12 @@ static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
         size_t total_written = 0;
         while (total_written < h2_out_len) {
             int wret = io_tls_write(sconn, h2_out + total_written, h2_out_len - total_written);
-            if (wret <= 0) {
+            if (wret == -EAGAIN) {
                 shuttle_data(sconn, client);
                 continue;
+            }
+            if (wret <= 0) {
+                return wret == 0 ? -EIO : wret;
             }
             total_written += (size_t)wret;
         }
@@ -670,7 +673,9 @@ void test_http2_multiple_streams_via_tls(void)
 
     TEST_ASSERT_EQUAL_STRING("h2", io_tls_get_alpn(sconn));
 
-    /* HTTP/2 session */
+    /* HTTP/2 session — single shared response is safe here because the body
+     * is immutable after init and nghttp2 reads it via data provider. Each
+     * stream gets its own h2_resp_data_t internally. */
     h2_test_ctx_t h2ctx = {.request_count = 0, .has_response = true};
     TEST_ASSERT_EQUAL_INT(0, io_response_init(&h2ctx.response));
     TEST_ASSERT_EQUAL_INT(0,
