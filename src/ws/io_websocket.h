@@ -1,6 +1,9 @@
 /**
  * @file io_websocket.h
- * @brief WebSocket protocol (RFC 6455) frame encoding/decoding and handshake.
+ * @brief WebSocket (RFC 6455) — wslay-backed event API with iohttp handshake.
+ *
+ * Handshake (io_ws_compute_accept, io_ws_validate_upgrade) is iohttp's own.
+ * Framing, masking, close handshake, ping/pong — delegated to wslay.
  */
 
 #ifndef IOHTTP_WS_WEBSOCKET_H
@@ -10,51 +13,58 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* WebSocket opcodes (RFC 6455 §11.8) */
-typedef enum : uint8_t {
-    IO_WS_OP_CONTINUATION = 0x0,
-    IO_WS_OP_TEXT = 0x1,
-    IO_WS_OP_BINARY = 0x2,
-    IO_WS_OP_CLOSE = 0x8,
-    IO_WS_OP_PING = 0x9,
-    IO_WS_OP_PONG = 0xA,
-} io_ws_opcode_t;
+#include <wslay/wslay.h>
 
-/* WebSocket close codes (RFC 6455 §7.4.1) */
-constexpr uint16_t IO_WS_CLOSE_NORMAL = 1000;
-constexpr uint16_t IO_WS_CLOSE_GOING_AWAY = 1001;
-constexpr uint16_t IO_WS_CLOSE_PROTOCOL = 1002;
-constexpr uint16_t IO_WS_CLOSE_INVALID = 1003;
-constexpr uint16_t IO_WS_CLOSE_TOO_BIG = 1009;
+/* ---- Constants ---- */
 
-/* Maximum sizes */
-constexpr size_t IO_WS_MAX_FRAME_HEADER = 14; /* 2 + 4(mask) + 8(64-bit len) */
-constexpr size_t IO_WS_MAX_CONTROL_PAYLOAD = 125;
-constexpr size_t IO_WS_GUID_LEN = 36;
-constexpr size_t IO_WS_ACCEPT_KEY_LEN = 28; /* base64(SHA-1) */
-constexpr size_t IO_WS_DEFAULT_MAX_MSG = 65536;
+constexpr size_t IO_WS_ACCEPT_KEY_LEN = 28;          /* base64(SHA-1) */
+constexpr size_t IO_WS_DEFAULT_MAX_MSG = (1U << 20); /* 1 MiB */
 
-/* WebSocket frame (parsed) */
+/* ---- Callbacks (application-provided) ---- */
+
+/**
+ * @brief Called when a complete WebSocket message is received.
+ * @param opcode  WSLAY_TEXT_FRAME or WSLAY_BINARY_FRAME.
+ * @param msg     Message payload (reassembled from fragments by wslay).
+ * @param len     Message length in bytes.
+ * @param ctx     User context from io_ws_ctx_t.user_data.
+ */
+typedef void (*io_ws_on_msg_fn)(uint8_t opcode, const uint8_t *msg, size_t len, void *ctx);
+
+/**
+ * @brief Called when peer sends a close frame.
+ * @param status_code  RFC 6455 close code (1000, 1001, ...).
+ * @param ctx          User context.
+ */
+typedef void (*io_ws_on_close_fn)(uint16_t status_code, void *ctx);
+
+/* ---- I/O adapters (caller must implement) ---- */
+
+/**
+ * @brief Read callback — must read up to len bytes from the peer.
+ * @return Bytes read (>0), or -1 on error. Set *wouldblock=true on EAGAIN.
+ */
+typedef ssize_t (*io_ws_recv_fn)(uint8_t *buf, size_t len, bool *wouldblock, void *ctx);
+
+/**
+ * @brief Write callback — must send up to len bytes to the peer.
+ * @return Bytes sent (>0), or -1 on error. Set *wouldblock=true on EAGAIN.
+ */
+typedef ssize_t (*io_ws_send_fn)(const uint8_t *data, size_t len, bool *wouldblock, void *ctx);
+
+/* ---- WebSocket context ---- */
+
 typedef struct {
-    io_ws_opcode_t opcode;
-    bool fin;
-    bool masked;
-    uint8_t mask_key[4];
-    uint64_t payload_len;
-    const uint8_t *payload;
-} io_ws_frame_t;
+    io_ws_on_msg_fn on_msg;
+    io_ws_on_close_fn on_close;
+    io_ws_recv_fn recv;
+    io_ws_send_fn send;
+    void *user_data;
+    wslay_event_context_ptr wslay_ctx;
+    uint64_t max_recv_msg_len;
+} io_ws_ctx_t;
 
-/* WebSocket connection context for fragmented messages */
-typedef struct {
-    uint8_t *frag_buf;
-    size_t frag_len;
-    size_t frag_capacity;
-    io_ws_opcode_t frag_opcode;
-    size_t max_message_size;
-    bool in_fragment;
-} io_ws_conn_t;
-
-/* ---- Upgrade handshake ---- */
+/* ---- Upgrade handshake (iohttp's own, uses wolfSSL SHA-1) ---- */
 
 /**
  * @brief Compute the Sec-WebSocket-Accept value from client key.
@@ -66,71 +76,84 @@ typedef struct {
 
 /**
  * @brief Validate an HTTP upgrade request for WebSocket.
- * @param method       HTTP method string.
- * @param upgrade_hdr  Upgrade header value.
- * @param conn_hdr     Connection header value.
- * @param ws_key       Sec-WebSocket-Key value.
- * @param ws_version   Sec-WebSocket-Version value.
+ * @param method       HTTP method string (must be "GET").
+ * @param upgrade_hdr  Upgrade header value (must contain "websocket").
+ * @param conn_hdr     Connection header value (must contain "Upgrade").
+ * @param ws_key       Sec-WebSocket-Key value (must be non-empty).
+ * @param ws_version   Sec-WebSocket-Version value (must be "13").
  * @return 0 if valid, -EINVAL if invalid.
  */
 [[nodiscard]] int io_ws_validate_upgrade(const char *method, const char *upgrade_hdr,
                                          const char *conn_hdr, const char *ws_key,
                                          const char *ws_version);
 
-/* ---- Frame encoding/decoding ---- */
+/* ---- wslay-backed session lifecycle ---- */
 
 /**
- * @brief Encode a WebSocket frame into buffer.
- * Server frames are NOT masked (RFC 6455 §5.1).
- * @param buf       Output buffer.
- * @param buf_size  Buffer capacity.
- * @param opcode    Frame opcode.
- * @param fin       Final fragment flag.
- * @param payload   Payload data (may be nullptr if len==0).
- * @param len       Payload length.
- * @return Total frame size on success, -ENOSPC if buffer too small.
+ * @brief Initialize a server-side WebSocket context backed by wslay.
+ * @param ws  Context to initialize.
+ * @return 0 on success, -EINVAL on bad args, -ENOMEM on allocation failure.
  */
-[[nodiscard]] int io_ws_frame_encode(uint8_t *buf, size_t buf_size, io_ws_opcode_t opcode, bool fin,
-                                     const uint8_t *payload, size_t len);
+[[nodiscard]] int io_ws_ctx_init(io_ws_ctx_t *ws);
 
 /**
- * @brief Decode a WebSocket frame from buffer.
- * @param buf      Input buffer.
- * @param buf_len  Input buffer length.
- * @param frame    Output parsed frame.
- * @return Total consumed bytes on success, -EAGAIN if incomplete,
- *         -EINVAL if malformed, -E2BIG if payload exceeds limit.
+ * @brief Destroy the WebSocket context, freeing wslay resources.
  */
-[[nodiscard]] int io_ws_frame_decode(const uint8_t *buf, size_t buf_len, io_ws_frame_t *frame);
+void io_ws_ctx_destroy(io_ws_ctx_t *ws);
+
+/* ---- Event processing ---- */
 
 /**
- * @brief Apply/remove XOR mask on payload data (in-place).
- * @param data      Data to mask/unmask.
- * @param len       Data length.
- * @param mask_key  4-byte mask key.
+ * @brief Process incoming data — calls recv callback, dispatches messages.
+ * @return 0 on success, -EIO on fatal wslay error.
  */
-void io_ws_apply_mask(uint8_t *data, size_t len, const uint8_t mask_key[4]);
-
-/* ---- Connection context ---- */
+[[nodiscard]] int io_ws_recv(io_ws_ctx_t *ws);
 
 /**
- * @brief Initialize a WebSocket connection context.
- * @param ws               Connection context to initialize.
- * @param max_message_size Maximum reassembled message size (0 for default).
- * @return 0 on success, -EINVAL if ws is nullptr.
+ * @brief Send all queued messages — calls send callback.
+ * @return 0 on success, -EIO on fatal wslay error.
  */
-[[nodiscard]] int io_ws_conn_init(io_ws_conn_t *ws, size_t max_message_size);
+[[nodiscard]] int io_ws_send(io_ws_ctx_t *ws);
+
+/* ---- Message queueing ---- */
 
 /**
- * @brief Reset connection context, freeing fragment buffer.
- * @param ws Connection context.
+ * @brief Queue a text message for sending.
+ * @return 0 on success, negative errno on error.
  */
-void io_ws_conn_reset(io_ws_conn_t *ws);
+[[nodiscard]] int io_ws_queue_text(io_ws_ctx_t *ws, const char *msg, size_t len);
 
 /**
- * @brief Destroy connection context, freeing all resources.
- * @param ws Connection context.
+ * @brief Queue a binary message for sending.
+ * @return 0 on success, negative errno on error.
  */
-void io_ws_conn_destroy(io_ws_conn_t *ws);
+[[nodiscard]] int io_ws_queue_binary(io_ws_ctx_t *ws, const uint8_t *data, size_t len);
+
+/**
+ * @brief Queue a close frame.
+ * @return 0 on success, negative errno on error.
+ */
+[[nodiscard]] int io_ws_queue_close(io_ws_ctx_t *ws, uint16_t code, const char *reason,
+                                    size_t reason_len);
+
+/**
+ * @brief Queue a ping frame.
+ * @return 0 on success, negative errno on error.
+ */
+[[nodiscard]] int io_ws_queue_ping(io_ws_ctx_t *ws);
+
+/* ---- State queries ---- */
+
+/** @return true if the context wants to read more data. */
+bool io_ws_want_read(const io_ws_ctx_t *ws);
+
+/** @return true if the context has data to write. */
+bool io_ws_want_write(const io_ws_ctx_t *ws);
+
+/** @return true if close frame has been received. */
+bool io_ws_close_received(const io_ws_ctx_t *ws);
+
+/** @return true if close frame has been sent. */
+bool io_ws_close_sent(const io_ws_ctx_t *ws);
 
 #endif /* IOHTTP_WS_WEBSOCKET_H */

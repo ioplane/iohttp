@@ -1,12 +1,14 @@
 /**
  * @file io_websocket.c
- * @brief WebSocket protocol (RFC 6455) implementation.
+ * @brief WebSocket (RFC 6455) — wslay-backed implementation.
+ *
+ * Handshake: iohttp (wolfSSL SHA-1 + base64).
+ * Framing, close, ping/pong, fragmentation: wslay.
  */
 
 #include "ws/io_websocket.h"
 
 #include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -17,7 +19,7 @@
 /* RFC 6455 §4.2.2: magic GUID */
 static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/* ---- Upgrade handshake ---- */
+/* ---- Upgrade handshake (iohttp's own) ---- */
 
 int io_ws_compute_accept(const char *client_key, char *accept_out)
 {
@@ -25,12 +27,11 @@ int io_ws_compute_accept(const char *client_key, char *accept_out)
         return -EINVAL;
     }
 
-    /* Concatenate key + GUID */
     size_t key_len = strlen(client_key);
     size_t guid_len = strlen(WS_GUID);
     size_t concat_len = key_len + guid_len;
 
-    /* Stack buffer for concatenation (key is 24 chars + GUID is 36 chars = 60) */
+    /* Stack buffer: key (24) + GUID (36) = 60 max */
     char concat[64];
     if (concat_len >= sizeof(concat)) {
         return -EINVAL;
@@ -39,7 +40,6 @@ int io_ws_compute_accept(const char *client_key, char *accept_out)
     memcpy(concat, client_key, key_len);
     memcpy(concat + key_len, WS_GUID, guid_len);
 
-    /* SHA-1 hash */
     wc_Sha sha;
     int ret = wc_InitSha(&sha);
     if (ret != 0) {
@@ -59,7 +59,6 @@ int io_ws_compute_accept(const char *client_key, char *accept_out)
         return -EINVAL;
     }
 
-    /* Base64 encode */
     unsigned int out_len = IO_WS_ACCEPT_KEY_LEN + 1;
     ret = Base64_Encode_NoNl(hash, WC_SHA_DIGEST_SIZE, (unsigned char *)accept_out, &out_len);
     if (ret != 0) {
@@ -78,27 +77,18 @@ int io_ws_validate_upgrade(const char *method, const char *upgrade_hdr, const ch
         return -EINVAL;
     }
 
-    /* Must be GET */
     if (strcasecmp(method, "GET") != 0) {
         return -EINVAL;
     }
-
-    /* Upgrade: websocket (case-insensitive) */
     if (strcasecmp(upgrade_hdr, "websocket") != 0) {
         return -EINVAL;
     }
-
-    /* Connection must contain "Upgrade" (case-insensitive) */
     if (strcasestr(conn_hdr, "Upgrade") == nullptr) {
         return -EINVAL;
     }
-
-    /* Sec-WebSocket-Key must be non-empty */
     if (strlen(ws_key) == 0) {
         return -EINVAL;
     }
-
-    /* Sec-WebSocket-Version must be "13" */
     if (strcmp(ws_version, "13") != 0) {
         return -EINVAL;
     }
@@ -106,182 +96,231 @@ int io_ws_validate_upgrade(const char *method, const char *upgrade_hdr, const ch
     return 0;
 }
 
-/* ---- Frame encoding ---- */
+/* ---- wslay callbacks ---- */
 
-int io_ws_frame_encode(uint8_t *buf, size_t buf_size, io_ws_opcode_t opcode, bool fin,
-                       const uint8_t *payload, size_t len)
+static ssize_t wslay_recv_cb(wslay_event_context_ptr ctx, uint8_t *buf, size_t len, int flags,
+                             void *user_data)
 {
-    if (buf == nullptr) {
-        return -EINVAL;
+    (void)ctx;
+    (void)flags;
+    io_ws_ctx_t *ws = user_data;
+
+    if (ws->recv == nullptr) {
+        wslay_event_set_error(ctx, WSLAY_ERR_CALLBACK_FAILURE);
+        return -1;
     }
 
-    /* Calculate header size */
-    size_t header_size = 2;
-    if (len > 65535) {
-        header_size += 8;
-    } else if (len > 125) {
-        header_size += 2;
+    bool wouldblock = false;
+    ssize_t n = ws->recv(buf, len, &wouldblock, ws->user_data);
+    if (n < 0) {
+        if (wouldblock) {
+            wslay_event_set_error(ctx, WSLAY_ERR_WOULDBLOCK);
+        } else {
+            wslay_event_set_error(ctx, WSLAY_ERR_CALLBACK_FAILURE);
+        }
+        return -1;
     }
 
-    size_t total = header_size + len;
-    if (total > buf_size) {
-        return -ENOSPC;
-    }
-
-    /* Byte 0: FIN + opcode */
-    buf[0] = (uint8_t)((fin ? 0x80U : 0x00U) | ((uint8_t)opcode & 0x0FU));
-
-    /* Byte 1: payload length (no mask bit for server frames) */
-    if (len <= 125) {
-        buf[1] = (uint8_t)len;
-    } else if (len <= 65535) {
-        buf[1] = 126;
-        buf[2] = (uint8_t)(len >> 8);
-        buf[3] = (uint8_t)(len & 0xFF);
-    } else {
-        buf[1] = 127;
-        uint64_t n = (uint64_t)len;
-        buf[2] = (uint8_t)(n >> 56);
-        buf[3] = (uint8_t)(n >> 48);
-        buf[4] = (uint8_t)(n >> 40);
-        buf[5] = (uint8_t)(n >> 32);
-        buf[6] = (uint8_t)(n >> 24);
-        buf[7] = (uint8_t)(n >> 16);
-        buf[8] = (uint8_t)(n >> 8);
-        buf[9] = (uint8_t)(n & 0xFF);
-    }
-
-    /* Payload */
-    if (len > 0 && payload != nullptr) {
-        memcpy(buf + header_size, payload, len);
-    }
-
-    return (int)total;
+    return n;
 }
 
-/* ---- Frame decoding ---- */
-
-int io_ws_frame_decode(const uint8_t *buf, size_t buf_len, io_ws_frame_t *frame)
+static ssize_t wslay_send_cb(wslay_event_context_ptr ctx, const uint8_t *data, size_t len,
+                             int flags, void *user_data)
 {
-    if (buf == nullptr || frame == nullptr) {
-        return -EINVAL;
+    (void)ctx;
+    (void)flags;
+    io_ws_ctx_t *ws = user_data;
+
+    if (ws->send == nullptr) {
+        wslay_event_set_error(ctx, WSLAY_ERR_CALLBACK_FAILURE);
+        return -1;
     }
 
-    if (buf_len < 2) {
-        return -EAGAIN;
-    }
-
-    /* Byte 0: FIN, RSV, opcode */
-    frame->fin = (buf[0] & 0x80U) != 0;
-    uint8_t rsv = (buf[0] >> 4) & 0x07U;
-    if (rsv != 0) {
-        return -EINVAL; /* RSV bits must be 0 without extensions */
-    }
-    frame->opcode = (io_ws_opcode_t)(buf[0] & 0x0FU);
-
-    /* Byte 1: mask flag, initial length */
-    frame->masked = (buf[1] & 0x80U) != 0;
-    uint8_t len7 = buf[1] & 0x7FU;
-
-    size_t offset = 2;
-    uint64_t payload_len;
-
-    if (len7 <= 125) {
-        payload_len = len7;
-    } else if (len7 == 126) {
-        if (buf_len < 4) {
-            return -EAGAIN;
+    bool wouldblock = false;
+    ssize_t n = ws->send(data, len, &wouldblock, ws->user_data);
+    if (n < 0) {
+        if (wouldblock) {
+            wslay_event_set_error(ctx, WSLAY_ERR_WOULDBLOCK);
+        } else {
+            wslay_event_set_error(ctx, WSLAY_ERR_CALLBACK_FAILURE);
         }
-        payload_len = ((uint64_t)buf[2] << 8) | (uint64_t)buf[3];
-        offset = 4;
-    } else { /* 127 */
-        if (buf_len < 10) {
-            return -EAGAIN;
-        }
-        payload_len = ((uint64_t)buf[2] << 56) | ((uint64_t)buf[3] << 48) |
-                      ((uint64_t)buf[4] << 40) | ((uint64_t)buf[5] << 32) |
-                      ((uint64_t)buf[6] << 24) | ((uint64_t)buf[7] << 16) |
-                      ((uint64_t)buf[8] << 8) | (uint64_t)buf[9];
-        offset = 10;
+        return -1;
     }
 
-    /* Control frames: payload must be <= 125 bytes */
-    if ((uint8_t)frame->opcode >= 0x8 && payload_len > IO_WS_MAX_CONTROL_PAYLOAD) {
-        return -EINVAL;
-    }
-
-    /* Read mask key if present */
-    if (frame->masked) {
-        if (buf_len < offset + 4) {
-            return -EAGAIN;
-        }
-        memcpy(frame->mask_key, buf + offset, 4);
-        offset += 4;
-    } else {
-        memset(frame->mask_key, 0, 4);
-    }
-
-    /* Check we have complete payload */
-    if (buf_len < offset + payload_len) {
-        return -EAGAIN;
-    }
-
-    /* Guard against int overflow on return value */
-    size_t total = offset + payload_len;
-    if (total > (size_t)INT32_MAX) {
-        return -E2BIG;
-    }
-
-    frame->payload_len = payload_len;
-    frame->payload = (payload_len > 0) ? (buf + offset) : nullptr;
-
-    return (int)total;
+    return n;
 }
 
-/* ---- Masking ---- */
-
-void io_ws_apply_mask(uint8_t *data, size_t len, const uint8_t mask_key[4])
+static void wslay_on_msg_cb(wslay_event_context_ptr ctx,
+                            const struct wslay_event_on_msg_recv_arg *arg, void *user_data)
 {
-    if (data == nullptr || mask_key == nullptr) {
+    (void)ctx;
+    io_ws_ctx_t *ws = user_data;
+
+    if (arg->opcode == WSLAY_CONNECTION_CLOSE) {
+        if (ws->on_close != nullptr) {
+            ws->on_close(arg->status_code, ws->user_data);
+        }
         return;
     }
 
-    for (size_t i = 0; i < len; i++) {
-        data[i] ^= mask_key[i % 4];
+    if (ws->on_msg != nullptr) {
+        ws->on_msg(arg->opcode, arg->msg, arg->msg_length, ws->user_data);
     }
 }
 
-/* ---- Connection context ---- */
+/* ---- Context lifecycle ---- */
 
-int io_ws_conn_init(io_ws_conn_t *ws, size_t max_message_size)
+int io_ws_ctx_init(io_ws_ctx_t *ws)
 {
     if (ws == nullptr) {
         return -EINVAL;
     }
+    if (ws->recv == nullptr || ws->send == nullptr) {
+        return -EINVAL;
+    }
 
-    memset(ws, 0, sizeof(*ws));
-    ws->max_message_size = (max_message_size > 0) ? max_message_size : IO_WS_DEFAULT_MAX_MSG;
+    struct wslay_event_callbacks cbs = {
+        .recv_callback = wslay_recv_cb,
+        .send_callback = wslay_send_cb,
+        .genmask_callback = nullptr, /* server does not mask */
+        .on_frame_recv_start_callback = nullptr,
+        .on_frame_recv_chunk_callback = nullptr,
+        .on_frame_recv_end_callback = nullptr,
+        .on_msg_recv_callback = wslay_on_msg_cb,
+    };
+
+    int ret = wslay_event_context_server_init(&ws->wslay_ctx, &cbs, ws);
+    if (ret != 0) {
+        return -ENOMEM;
+    }
+
+    uint64_t max_len = ws->max_recv_msg_len > 0 ? ws->max_recv_msg_len : IO_WS_DEFAULT_MAX_MSG;
+    wslay_event_config_set_max_recv_msg_length(ws->wslay_ctx, max_len);
+
     return 0;
 }
 
-void io_ws_conn_reset(io_ws_conn_t *ws)
+void io_ws_ctx_destroy(io_ws_ctx_t *ws)
 {
     if (ws == nullptr) {
         return;
     }
-
-    free(ws->frag_buf);
-    ws->frag_buf = nullptr;
-    ws->frag_len = 0;
-    ws->frag_capacity = 0;
-    ws->in_fragment = false;
+    if (ws->wslay_ctx != nullptr) {
+        wslay_event_context_free(ws->wslay_ctx);
+        ws->wslay_ctx = nullptr;
+    }
 }
 
-void io_ws_conn_destroy(io_ws_conn_t *ws)
+/* ---- Event processing ---- */
+
+int io_ws_recv(io_ws_ctx_t *ws)
 {
-    if (ws == nullptr) {
-        return;
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return -EINVAL;
     }
 
-    io_ws_conn_reset(ws);
+    int ret = wslay_event_recv(ws->wslay_ctx);
+    if (ret != 0) {
+        return -EIO;
+    }
+    return 0;
+}
+
+int io_ws_send(io_ws_ctx_t *ws)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return -EINVAL;
+    }
+
+    int ret = wslay_event_send(ws->wslay_ctx);
+    if (ret != 0) {
+        return -EIO;
+    }
+    return 0;
+}
+
+/* ---- Message queueing ---- */
+
+static int ws_queue_msg(io_ws_ctx_t *ws, uint8_t opcode, const uint8_t *data, size_t len)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return -EINVAL;
+    }
+
+    struct wslay_event_msg msg = {
+        .opcode = opcode,
+        .msg = data,
+        .msg_length = len,
+    };
+
+    int ret = wslay_event_queue_msg(ws->wslay_ctx, &msg);
+    if (ret != 0) {
+        if (ret == WSLAY_ERR_NOMEM) {
+            return -ENOMEM;
+        }
+        return -EINVAL;
+    }
+    return 0;
+}
+
+int io_ws_queue_text(io_ws_ctx_t *ws, const char *msg, size_t len)
+{
+    return ws_queue_msg(ws, WSLAY_TEXT_FRAME, (const uint8_t *)msg, len);
+}
+
+int io_ws_queue_binary(io_ws_ctx_t *ws, const uint8_t *data, size_t len)
+{
+    return ws_queue_msg(ws, WSLAY_BINARY_FRAME, data, len);
+}
+
+int io_ws_queue_close(io_ws_ctx_t *ws, uint16_t code, const char *reason, size_t reason_len)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return -EINVAL;
+    }
+
+    int ret = wslay_event_queue_close(ws->wslay_ctx, code, (const uint8_t *)reason, reason_len);
+    if (ret != 0) {
+        return -EINVAL;
+    }
+    return 0;
+}
+
+int io_ws_queue_ping(io_ws_ctx_t *ws)
+{
+    return ws_queue_msg(ws, WSLAY_PING, nullptr, 0);
+}
+
+/* ---- State queries ---- */
+
+bool io_ws_want_read(const io_ws_ctx_t *ws)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return false;
+    }
+    return wslay_event_want_read(ws->wslay_ctx) != 0;
+}
+
+bool io_ws_want_write(const io_ws_ctx_t *ws)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return false;
+    }
+    return wslay_event_want_write(ws->wslay_ctx) != 0;
+}
+
+bool io_ws_close_received(const io_ws_ctx_t *ws)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return false;
+    }
+    return wslay_event_get_close_received(ws->wslay_ctx) != 0;
+}
+
+bool io_ws_close_sent(const io_ws_ctx_t *ws)
+{
+    if (ws == nullptr || ws->wslay_ctx == nullptr) {
+        return false;
+    }
+    return wslay_event_get_close_sent(ws->wslay_ctx) != 0;
 }
