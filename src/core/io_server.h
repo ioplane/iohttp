@@ -106,4 +106,42 @@ void io_server_stop(io_server_t *srv);
  */
 [[nodiscard]] int io_server_shutdown(io_server_t *srv, io_shutdown_mode_t mode);
 
+/* ---- Forward declarations ---- */
+
+typedef struct io_router io_router_t;
+typedef struct io_tls_ctx io_tls_ctx_t;
+typedef struct io_ctx io_ctx_t;
+
+/* ---- Request callback (used when no router is set) ---- */
+
+typedef int (*io_server_on_request_fn)(io_ctx_t *c, void *user_data);
+
+/* ---- Configuration extensions ---- */
+
+/**
+ * @brief Attach a router for request dispatch.
+ * @param srv  Server instance.
+ * @param router  Router (NOT owned by server, caller manages lifetime).
+ * @return 0 on success, -EINVAL if srv is nullptr.
+ */
+[[nodiscard]] int io_server_set_router(io_server_t *srv, io_router_t *router);
+
+/**
+ * @brief Set a fallback request callback (used when no router is set).
+ * @param srv  Server instance.
+ * @param fn   Callback function (may be nullptr to clear).
+ * @param user_data  Opaque pointer passed to callback.
+ * @return 0 on success, -EINVAL if srv is nullptr.
+ */
+[[nodiscard]] int io_server_set_on_request(io_server_t *srv, io_server_on_request_fn fn,
+                                           void *user_data);
+
+/**
+ * @brief Attach a TLS context for encrypted connections.
+ * @param srv  Server instance.
+ * @param tls_ctx  TLS context (NOT owned by server, caller manages lifetime).
+ * @return 0 on success, -EINVAL if srv is nullptr.
+ */
+[[nodiscard]] int io_server_set_tls(io_server_t *srv, io_tls_ctx_t *tls_ctx);
+
 #endif /* IOHTTP_CORE_SERVER_H */

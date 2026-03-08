@@ -22,6 +22,10 @@ struct io_server {
     io_server_config_t config;
     io_loop_t *loop;
     io_conn_pool_t *pool;
+    io_router_t *router;               /* NOT owned */
+    io_tls_ctx_t *tls_ctx;             /* NOT owned */
+    io_server_on_request_fn on_request;
+    void *on_request_data;
     int listen_fd;
     bool listening;
     bool accepting; /* multishot accept armed */
@@ -355,5 +359,35 @@ int io_server_shutdown(io_server_t *srv, io_shutdown_mode_t mode)
     }
 
     io_loop_stop(srv->loop);
+    return 0;
+}
+
+/* ---- Configuration extensions ---- */
+
+int io_server_set_router(io_server_t *srv, io_router_t *router)
+{
+    if (srv == nullptr) {
+        return -EINVAL;
+    }
+    srv->router = router;
+    return 0;
+}
+
+int io_server_set_on_request(io_server_t *srv, io_server_on_request_fn fn, void *user_data)
+{
+    if (srv == nullptr) {
+        return -EINVAL;
+    }
+    srv->on_request = fn;
+    srv->on_request_data = user_data;
+    return 0;
+}
+
+int io_server_set_tls(io_server_t *srv, io_tls_ctx_t *tls_ctx)
+{
+    if (srv == nullptr) {
+        return -EINVAL;
+    }
+    srv->tls_ctx = tls_ctx;
     return 0;
 }

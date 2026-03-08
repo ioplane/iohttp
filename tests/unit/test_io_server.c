@@ -266,6 +266,50 @@ void test_server_accept_backpressure(void)
     io_server_destroy(srv);
 }
 
+/* ---- Configuration extension tests ---- */
+
+void test_server_set_router(void)
+{
+    io_server_config_t cfg;
+    io_server_config_init(&cfg);
+    cfg.listen_port = 19001;
+    io_server_t *srv = io_server_create(&cfg);
+    TEST_ASSERT_NOT_NULL(srv);
+
+    TEST_ASSERT_EQUAL_INT(-EINVAL, io_server_set_router(nullptr, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, nullptr));
+
+    io_server_destroy(srv);
+}
+
+void test_server_set_on_request(void)
+{
+    io_server_config_t cfg;
+    io_server_config_init(&cfg);
+    cfg.listen_port = 19002;
+    io_server_t *srv = io_server_create(&cfg);
+    TEST_ASSERT_NOT_NULL(srv);
+
+    TEST_ASSERT_EQUAL_INT(-EINVAL, io_server_set_on_request(nullptr, nullptr, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, nullptr, nullptr));
+
+    io_server_destroy(srv);
+}
+
+void test_server_set_tls(void)
+{
+    io_server_config_t cfg;
+    io_server_config_init(&cfg);
+    cfg.listen_port = 19003;
+    io_server_t *srv = io_server_create(&cfg);
+    TEST_ASSERT_NOT_NULL(srv);
+
+    TEST_ASSERT_EQUAL_INT(-EINVAL, io_server_set_tls(nullptr, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, io_server_set_tls(srv, nullptr));
+
+    io_server_destroy(srv);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -282,6 +326,9 @@ int main(void)
     RUN_TEST(test_server_stop);
     RUN_TEST(test_server_shutdown_immediate);
     RUN_TEST(test_server_accept_backpressure);
+    RUN_TEST(test_server_set_router);
+    RUN_TEST(test_server_set_on_request);
+    RUN_TEST(test_server_set_tls);
 
     return UNITY_END();
 }
