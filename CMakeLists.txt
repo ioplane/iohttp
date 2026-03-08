@@ -262,3 +262,28 @@ target_link_directories(io_buffer PUBLIC ${LIBURING_LIBRARY_DIRS})
 target_link_libraries(io_buffer PUBLIC ${LIBURING_LIBRARIES})
 
 io_add_test(test_io_buffer tests/unit/test_io_buffer.c io_buffer)
+
+# ============================================================================
+# Sprint 2: wolfSSL TLS integration
+# ============================================================================
+
+add_library(io_tls STATIC src/tls/io_tls.c)
+target_include_directories(io_tls PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(io_tls PUBLIC ${WOLFSSL_INCLUDE_DIRS})
+target_link_directories(io_tls PUBLIC ${WOLFSSL_LIBRARY_DIRS})
+target_link_libraries(io_tls PUBLIC ${WOLFSSL_LIBRARIES})
+
+if(BUILD_TESTING AND TARGET unity)
+    add_executable(test_io_tls tests/unit/test_io_tls.c)
+    target_include_directories(test_io_tls PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(test_io_tls PRIVATE ${WOLFSSL_INCLUDE_DIRS})
+    target_link_directories(test_io_tls PRIVATE ${WOLFSSL_LIBRARY_DIRS})
+    target_link_libraries(test_io_tls PRIVATE unity io_tls ${WOLFSSL_LIBRARIES})
+    target_compile_options(test_io_tls PRIVATE
+        -Wno-missing-prototypes -Wno-missing-declarations
+    )
+    target_compile_definitions(test_io_tls PRIVATE
+        TEST_CERTS_DIR="${CMAKE_SOURCE_DIR}/tests/certs"
+    )
+    add_test(NAME test_io_tls COMMAND test_io_tls)
+endif()
