@@ -29,6 +29,8 @@ typedef enum : uint8_t {
     IO_OP_CLOSE = 0x08,
     IO_OP_SEND_ZC = 0x09,
     IO_OP_CANCEL = 0x0A,
+    IO_OP_RECVMSG = 0x0B, /* UDP recvmsg for QUIC datagrams */
+    IO_OP_SENDMSG = 0x0C, /* UDP sendmsg for QUIC datagrams */
 } io_op_type_t;
 
 /* ---- Ring configuration ---- */

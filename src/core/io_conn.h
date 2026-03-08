@@ -21,6 +21,7 @@ typedef enum : uint8_t {
     IO_CONN_HTTP_ACTIVE,
     IO_CONN_WEBSOCKET,
     IO_CONN_SSE,
+    IO_CONN_QUIC, /* QUIC/HTTP/3 active */
     IO_CONN_DRAINING,
     IO_CONN_CLOSING,
 } io_conn_state_t;
