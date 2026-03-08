@@ -250,3 +250,15 @@ target_include_directories(io_server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(io_server PUBLIC io_loop io_conn)
 
 io_add_test(test_io_server tests/unit/test_io_server.c io_server io_loop io_conn)
+
+# ============================================================================
+# Sprint 1: Buffer pool management
+# ============================================================================
+
+add_library(io_buffer STATIC src/core/io_buffer.c)
+target_include_directories(io_buffer PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(io_buffer PUBLIC ${LIBURING_INCLUDE_DIRS})
+target_link_directories(io_buffer PUBLIC ${LIBURING_LIBRARY_DIRS})
+target_link_libraries(io_buffer PUBLIC ${LIBURING_LIBRARIES})
+
+io_add_test(test_io_buffer tests/unit/test_io_buffer.c io_buffer)
