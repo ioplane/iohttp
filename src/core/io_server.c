@@ -171,6 +171,22 @@ static int arm_multishot_accept(io_server_t *srv)
     return 0;
 }
 
+static int arm_recv(io_server_t *srv, io_conn_t *conn)
+{
+    struct io_uring *ring = io_loop_ring(srv->loop);
+    struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+    if (sqe == nullptr) {
+        return -ENOSPC;
+    }
+
+    io_uring_prep_recv(sqe, conn->fd,
+                       conn->recv_buf + conn->recv_len,
+                       conn->recv_buf_size - conn->recv_len, 0);
+    io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(conn->id, IO_OP_RECV));
+
+    return 0;
+}
+
 /* ---- Run ---- */
 
 int io_server_listen(io_server_t *srv)
@@ -297,6 +313,8 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                 io_conn_t *conn = io_conn_alloc(srv->pool);
                 if (conn != nullptr) {
                     conn->fd = client_fd;
+                    (void)io_conn_transition(conn, IO_CONN_HTTP_ACTIVE);
+                    (void)arm_recv(srv, conn);
                 } else {
                     /* Backpressure: pool full, close immediately */
                     close(client_fd);

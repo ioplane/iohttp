@@ -8,6 +8,7 @@
 
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -39,6 +40,18 @@ typedef struct {
     uint64_t last_activity_ms;
     void *protocol_ctx; /**< HTTP/1.1, HTTP/2, or HTTP/3 state */
     void *tls_ctx;      /**< WOLFSSL * */
+
+    /* ---- Recv buffer ---- */
+    uint8_t *recv_buf;    /**< receive buffer (heap-allocated) */
+    size_t recv_buf_size; /**< total buffer capacity */
+    size_t recv_len;      /**< bytes currently in buffer */
+
+    /* ---- Send state ---- */
+    uint8_t *send_buf;    /**< pending send data */
+    size_t send_len;      /**< bytes remaining to send */
+    size_t send_offset;   /**< bytes already sent */
+    bool send_active;     /**< true if IO_OP_SEND is in-flight */
+    bool keep_alive;      /**< HTTP/1.1 keep-alive (re-arm recv after send) */
 } io_conn_t;
 
 /* ---- Opaque pool type ---- */
@@ -80,6 +93,14 @@ void io_conn_free(io_conn_pool_t *pool, io_conn_t *conn);
  * @return Matching connection or nullptr if not found.
  */
 io_conn_t *io_conn_find(io_conn_pool_t *pool, int fd);
+
+/**
+ * @brief Get a connection by pool index (O(1) lookup).
+ * @param pool  Connection pool.
+ * @param index Zero-based index into the pool array.
+ * @return Connection pointer, or nullptr if index is out of range.
+ */
+io_conn_t *io_conn_pool_get(io_conn_pool_t *pool, uint32_t index);
 
 /* ---- State machine ---- */
 

@@ -212,6 +212,48 @@ void test_conn_state_invalid_transition(void)
     io_conn_pool_destroy(pool);
 }
 
+/* ---- Recv buffer tests ---- */
+
+void test_conn_alloc_has_recv_buffer(void)
+{
+    io_conn_pool_t *pool = io_conn_pool_create(4);
+    TEST_ASSERT_NOT_NULL(pool);
+
+    io_conn_t *conn = io_conn_alloc(pool);
+    TEST_ASSERT_NOT_NULL(conn);
+    TEST_ASSERT_NOT_NULL(conn->recv_buf);
+    TEST_ASSERT_GREATER_THAN(0, (int)conn->recv_buf_size);
+    TEST_ASSERT_EQUAL(0, conn->recv_len);
+    TEST_ASSERT_FALSE(conn->send_active);
+
+    io_conn_free(pool, conn);
+    io_conn_pool_destroy(pool);
+}
+
+/* ---- Pool get tests ---- */
+
+void test_conn_pool_get_valid(void)
+{
+    io_conn_pool_t *pool = io_conn_pool_create(4);
+    TEST_ASSERT_NOT_NULL(pool);
+
+    io_conn_t *conn = io_conn_alloc(pool);
+    TEST_ASSERT_NOT_NULL(conn);
+
+    /* Index 0 should return the first slot */
+    io_conn_t *got = io_conn_pool_get(pool, 0);
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_EQUAL_PTR(conn, got);
+
+    /* Out of range returns nullptr */
+    TEST_ASSERT_NULL(io_conn_pool_get(pool, 999));
+
+    /* nullptr pool returns nullptr */
+    TEST_ASSERT_NULL(io_conn_pool_get(nullptr, 0));
+
+    io_conn_pool_destroy(pool);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -226,6 +268,8 @@ int main(void)
     RUN_TEST(test_conn_find_missing);
     RUN_TEST(test_conn_state_valid_transition);
     RUN_TEST(test_conn_state_invalid_transition);
+    RUN_TEST(test_conn_alloc_has_recv_buffer);
+    RUN_TEST(test_conn_pool_get_valid);
 
     return UNITY_END();
 }

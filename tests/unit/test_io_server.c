@@ -310,6 +310,29 @@ void test_server_set_tls(void)
     io_server_destroy(srv);
 }
 
+/* ---- Accept arms recv test ---- */
+
+void test_server_accept_arms_recv(void)
+{
+    io_server_config_t cfg = make_config(19010, 16);
+    io_server_t *srv = io_server_create(&cfg);
+    TEST_ASSERT_NOT_NULL(srv);
+
+    int fd = io_server_listen(srv);
+    TEST_ASSERT_GREATER_THAN(0, fd);
+    uint16_t port = get_bound_port(fd);
+
+    int client_fd = connect_client(port);
+    TEST_ASSERT_TRUE(client_fd >= 0);
+
+    int ret = io_server_run_once(srv, 1000);
+    TEST_ASSERT_GREATER_THAN(0, ret);
+    TEST_ASSERT_EQUAL_UINT32(1, io_conn_pool_active(io_server_pool(srv)));
+
+    close(client_fd);
+    io_server_destroy(srv);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -329,6 +352,7 @@ int main(void)
     RUN_TEST(test_server_set_router);
     RUN_TEST(test_server_set_on_request);
     RUN_TEST(test_server_set_tls);
+    RUN_TEST(test_server_accept_arms_recv);
 
     return UNITY_END();
 }

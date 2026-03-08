@@ -106,6 +106,8 @@ void io_conn_pool_destroy(io_conn_pool_t *pool)
 
 /* ---- Connection management ---- */
 
+constexpr size_t IO_CONN_RECV_BUF_SIZE = 8192;
+
 io_conn_t *io_conn_alloc(io_conn_pool_t *pool)
 {
     if (!pool) {
@@ -120,6 +122,21 @@ io_conn_t *io_conn_alloc(io_conn_pool_t *pool)
             conn->state = IO_CONN_ACCEPTING;
             conn->id = pool->next_id++;
             pool->active_count++;
+
+            conn->recv_buf = malloc(IO_CONN_RECV_BUF_SIZE);
+            if (conn->recv_buf == nullptr) {
+                conn->state = IO_CONN_FREE;
+                pool->active_count--;
+                return nullptr;
+            }
+            conn->recv_buf_size = IO_CONN_RECV_BUF_SIZE;
+            conn->recv_len = 0;
+            conn->send_buf = nullptr;
+            conn->send_len = 0;
+            conn->send_offset = 0;
+            conn->send_active = false;
+            conn->keep_alive = false;
+
             return conn;
         }
     }
@@ -132,6 +149,17 @@ void io_conn_free(io_conn_pool_t *pool, io_conn_t *conn)
     if (!pool || !conn) {
         return;
     }
+
+    free(conn->recv_buf);
+    conn->recv_buf = nullptr;
+    conn->recv_buf_size = 0;
+    conn->recv_len = 0;
+    free(conn->send_buf);
+    conn->send_buf = nullptr;
+    conn->send_len = 0;
+    conn->send_offset = 0;
+    conn->send_active = false;
+    conn->keep_alive = false;
 
     memset(conn, 0, sizeof(*conn));
     conn->fd = -1;
@@ -152,6 +180,14 @@ io_conn_t *io_conn_find(io_conn_pool_t *pool, int fd)
     }
 
     return nullptr;
+}
+
+io_conn_t *io_conn_pool_get(io_conn_pool_t *pool, uint32_t index)
+{
+    if (pool == nullptr || index >= pool->max_conns) {
+        return nullptr;
+    }
+    return &pool->conns[index];
 }
 
 /* ---- State machine ---- */
