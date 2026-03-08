@@ -5,8 +5,12 @@
 #include <errno.h>
 #include <string.h>
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{
+}
+void tearDown(void)
+{
+}
 
 /* ---- Config tests ---- */
 

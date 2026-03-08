@@ -1,12 +1,16 @@
-#include <unity/unity.h>
-#include "http/io_quic.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <string.h>
+#include <unity/unity.h>
+#include "http/io_quic.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{
+}
+void tearDown(void)
+{
+}
 
 /* ---- Config tests ---- */
 
@@ -82,9 +86,8 @@ void test_quic_conn_create_null_cfg(void)
     uint8_t scid[8] = {9, 10, 11, 12, 13, 14, 15, 16};
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
-    TEST_ASSERT_NULL(io_quic_conn_create(nullptr, &cbs, dcid, 8, scid, 8,
-                                          (struct sockaddr *)&local,
-                                          (struct sockaddr *)&remote, nullptr));
+    TEST_ASSERT_NULL(io_quic_conn_create(nullptr, &cbs, dcid, 8, scid, 8, (struct sockaddr *)&local,
+                                         (struct sockaddr *)&remote, nullptr));
 }
 
 void test_quic_conn_destroy_null(void)
@@ -97,8 +100,7 @@ void test_quic_on_recv_null(void)
 {
     uint8_t buf[10] = {0};
     struct sockaddr_in remote = {.sin_family = AF_INET};
-    TEST_ASSERT_EQUAL_INT(-EINVAL, io_quic_on_recv(nullptr, buf, 10,
-                                                     (struct sockaddr *)&remote));
+    TEST_ASSERT_EQUAL_INT(-EINVAL, io_quic_on_recv(nullptr, buf, 10, (struct sockaddr *)&remote));
 }
 
 void test_quic_flush_null(void)
@@ -170,9 +172,8 @@ static int on_stream_open(io_quic_conn_t *conn, int64_t stream_id, void *user_da
     return 0;
 }
 
-static int on_stream_data(io_quic_conn_t *conn, int64_t stream_id,
-                           const uint8_t *data, size_t len,
-                           bool fin, void *user_data)
+static int on_stream_data(io_quic_conn_t *conn, int64_t stream_id, const uint8_t *data, size_t len,
+                          bool fin, void *user_data)
 {
     (void)conn;
     (void)stream_id;
@@ -201,9 +202,8 @@ void test_quic_conn_create_with_certs(void)
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
     io_quic_conn_t *conn = io_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
-                                                 (struct sockaddr *)&local,
-                                                 (struct sockaddr *)&remote,
-                                                 nullptr);
+                                               (struct sockaddr *)&local,
+                                               (struct sockaddr *)&remote, nullptr);
     /* Connection creation may fail if cert files don't exist */
     if (conn == nullptr) {
         TEST_IGNORE_MESSAGE("Could not create QUIC conn (cert files missing?)");
@@ -231,9 +231,8 @@ void test_quic_get_timeout_not_max_after_create(void)
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
     io_quic_conn_t *conn = io_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
-                                                 (struct sockaddr *)&local,
-                                                 (struct sockaddr *)&remote,
-                                                 nullptr);
+                                               (struct sockaddr *)&local,
+                                               (struct sockaddr *)&remote, nullptr);
     if (conn == nullptr) {
         TEST_IGNORE_MESSAGE("cert files missing");
         return;
@@ -254,9 +253,8 @@ void test_quic_close_sets_closed(void)
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
     io_quic_conn_t *conn = io_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
-                                                 (struct sockaddr *)&local,
-                                                 (struct sockaddr *)&remote,
-                                                 nullptr);
+                                               (struct sockaddr *)&local,
+                                               (struct sockaddr *)&remote, nullptr);
     if (conn == nullptr) {
         TEST_IGNORE_MESSAGE("cert files missing");
         return;

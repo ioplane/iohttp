@@ -459,9 +459,12 @@ static int on_frame_recv_cb(nghttp2_session *session, const nghttp2_frame *frame
 
     if (h2->on_request != nullptr) {
         io_response_t resp;
-        io_response_init(&resp);
+        int rc = io_response_init(&resp);
+        if (rc != 0) {
+            return 0;
+        }
         io_ctx_t ctx;
-        int rc = io_ctx_init(&ctx, &sd->request, &resp, nullptr);
+        rc = io_ctx_init(&ctx, &sd->request, &resp, nullptr);
         if (rc == 0) {
             rc = h2->on_request(&ctx, frame->hd.stream_id, h2->user_data);
             if (rc == 0 && !ctx.aborted) {
