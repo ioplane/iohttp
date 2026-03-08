@@ -9,6 +9,7 @@
 #include "http/io_http2.h"
 
 #include <errno.h>
+#include <stdckdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -244,8 +245,8 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
         /* Allocate response data context — freed when stream closes */
         h2_resp_data_t *rd = calloc(1, sizeof(*rd));
         if (rd == nullptr) {
-            free(nva);
-            return -ENOMEM;
+            rv = -ENOMEM;
+            goto cleanup;
         }
         rd->body = resp->body;
         rd->body_len = resp->body_len;
@@ -263,7 +264,9 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
             /* Store rd in stream data so it is freed when the stream closes */
             h2_stream_data_t *sd =
                 nghttp2_session_get_stream_user_data(session->ng_session, stream_id);
-            if (sd != nullptr) {
+            if (sd == nullptr) {
+                free(rd);
+            } else {
                 sd->resp_data = rd;
             }
         }
@@ -271,6 +274,7 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
         rv = nghttp2_submit_response2(session->ng_session, stream_id, nva, nva_count, nullptr);
     }
 
+cleanup:
     /* Free temporary lowercase name copies */
     if (lc_names != nullptr) {
         for (uint32_t i = 0; i < resp->header_count; i++) {
@@ -279,7 +283,7 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
         free(lc_names);
     }
     free(nva);
-    return (rv == 0) ? 0 : -EIO;
+    return (rv == 0) ? 0 : ((rv == -ENOMEM) ? -ENOMEM : -EIO);
 }
 
 /* ---- nghttp2 callbacks ---- */
@@ -370,7 +374,11 @@ static int on_header_cb(nghttp2_session *session, const nghttp2_frame *frame, co
                 if (value[i] < '0' || value[i] > '9') {
                     return NGHTTP2_ERR_CALLBACK_FAILURE;
                 }
-                req->content_length = req->content_length * 10 + (size_t)(value[i] - '0');
+                size_t next;
+                if (ckd_mul(&next, req->content_length, 10) ||
+                    ckd_add(&req->content_length, next, (size_t)(value[i] - '0'))) {
+                    return NGHTTP2_ERR_CALLBACK_FAILURE;
+                }
             }
         }
     }
@@ -561,7 +569,7 @@ void io_http2_session_destroy(io_http2_session_t *session)
     free(session);
 }
 
-int io_http2_on_recv(io_http2_session_t *session, const uint8_t *data, size_t len)
+ssize_t io_http2_on_recv(io_http2_session_t *session, const uint8_t *data, size_t len)
 {
     if (session == nullptr || data == nullptr) {
         return -EINVAL;
@@ -572,7 +580,7 @@ int io_http2_on_recv(io_http2_session_t *session, const uint8_t *data, size_t le
         return -EIO;
     }
 
-    return (int)consumed;
+    return (ssize_t)consumed;
 }
 
 int io_http2_flush(io_http2_session_t *session, const uint8_t **out_data, size_t *out_len)

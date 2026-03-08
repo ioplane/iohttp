@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #include "http/io_request.h"
 #include "http/io_response.h"
@@ -38,7 +39,8 @@ typedef struct {
  * @param stream_id The HTTP/2 stream ID.
  * @param user_data User context from io_http2_session_create().
  * @return Response to send, or nullptr to send no response.
- *         Caller owns the response and must destroy it after the callback.
+ *         Response must remain valid until the next io_http2_flush() call
+ *         completes. Caller is responsible for destroying it after flush.
  */
 typedef io_response_t *(*io_http2_on_request_fn)(const io_request_t *req, int32_t stream_id,
                                                   void *user_data);
@@ -71,7 +73,7 @@ void io_http2_session_destroy(io_http2_session_t *session);
  * @param len     Number of bytes.
  * @return Number of bytes consumed (>= 0), or negative errno on error.
  */
-[[nodiscard]] int io_http2_on_recv(io_http2_session_t *session, const uint8_t *data, size_t len);
+[[nodiscard]] ssize_t io_http2_on_recv(io_http2_session_t *session, const uint8_t *data, size_t len);
 
 /**
  * @brief Get pending output data from the session.
@@ -95,15 +97,15 @@ void io_http2_session_destroy(io_http2_session_t *session);
 /* ---- State queries ---- */
 
 /** @return true if the session wants to read more data. */
-bool io_http2_want_read(const io_http2_session_t *session);
+[[nodiscard]] bool io_http2_want_read(const io_http2_session_t *session);
 
 /** @return true if the session has data to write. */
-bool io_http2_want_write(const io_http2_session_t *session);
+[[nodiscard]] bool io_http2_want_write(const io_http2_session_t *session);
 
 /** @return true if GOAWAY has been sent. */
-bool io_http2_goaway_sent(const io_http2_session_t *session);
+[[nodiscard]] bool io_http2_goaway_sent(const io_http2_session_t *session);
 
 /** @return true if the session is draining (GOAWAY sent, no more streams). */
-bool io_http2_is_draining(const io_http2_session_t *session);
+[[nodiscard]] bool io_http2_is_draining(const io_http2_session_t *session);
 
 #endif /* IOHTTP_HTTP_HTTP2_H */

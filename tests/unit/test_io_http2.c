@@ -124,19 +124,22 @@ static void client_send_preface(nghttp2_session *client, test_buf_t *out)
 
 static int pump(io_http2_session_t *server, test_buf_t *client_out, test_buf_t *server_out)
 {
-    int rv = io_http2_on_recv(server, client_out->data, client_out->len);
-    if (rv < 0) {
-        return rv;
+    ssize_t consumed = io_http2_on_recv(server, client_out->data, client_out->len);
+    if (consumed < 0) {
+        return (int)consumed;
     }
     client_out->len = 0;
 
     const uint8_t *data;
     size_t len;
-    rv = io_http2_flush(server, &data, &len);
+    int rv = io_http2_flush(server, &data, &len);
     if (rv != 0) {
         return rv;
     }
     if (server_out != nullptr && len > 0) {
+        if (server_out->len + len > sizeof(server_out->data)) {
+            return -ENOSPC;
+        }
         memcpy(server_out->data + server_out->len, data, len);
         server_out->len += len;
     }
