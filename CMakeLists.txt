@@ -692,3 +692,33 @@ if(NGTCP2_FOUND AND NGTCP2_WOLFSSL_FOUND)
 else()
     message(STATUS "QUIC transport disabled (ngtcp2 or ngtcp2_crypto_wolfssl not found)")
 endif()
+
+# ============================================================================
+# Sprint 10: HTTP/3 session (nghttp3)
+# ============================================================================
+
+if(NGHTTP3_FOUND AND TARGET io_quic)
+    add_library(io_http3 STATIC src/http/io_http3.c)
+    target_include_directories(io_http3 PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(io_http3 PUBLIC ${NGHTTP3_INCLUDE_DIRS})
+    target_link_directories(io_http3 PUBLIC ${NGHTTP3_LIBRARY_DIRS})
+    target_link_libraries(io_http3 PUBLIC ${NGHTTP3_LIBRARIES} io_quic io_request io_response io_ctx)
+    message(STATUS "HTTP/3 enabled (nghttp3)")
+
+    if(BUILD_TESTING AND TARGET unity)
+        add_executable(test_io_http3 tests/unit/test_io_http3.c)
+        target_include_directories(test_io_http3 PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_include_directories(test_io_http3 PRIVATE ${NGHTTP3_INCLUDE_DIRS})
+        target_link_directories(test_io_http3 PRIVATE ${NGHTTP3_LIBRARY_DIRS})
+        target_link_libraries(test_io_http3 PRIVATE
+            unity io_http3 io_quic io_request io_response io_ctx
+            ${NGHTTP3_LIBRARIES}
+        )
+        target_compile_options(test_io_http3 PRIVATE
+            -Wno-missing-prototypes -Wno-missing-declarations
+        )
+        add_test(NAME test_io_http3 COMMAND test_io_http3)
+    endif()
+else()
+    message(STATUS "HTTP/3 disabled (nghttp3 or io_quic not available)")
+endif()
