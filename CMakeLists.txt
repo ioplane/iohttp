@@ -503,3 +503,27 @@ endif()
 if(BROTLI_ENC_FOUND)
     target_compile_definitions(test_io_compress PRIVATE IOHTTP_HAVE_BROTLI)
 endif()
+
+# ============================================================================
+# Sprint 6: Server-Sent Events
+# ============================================================================
+
+add_library(io_sse STATIC src/ws/io_sse.c)
+target_include_directories(io_sse PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+io_add_test(test_io_sse tests/unit/test_io_sse.c io_sse)
+
+# ============================================================================
+# Sprint 6: WebSocket (RFC 6455)
+# ============================================================================
+
+add_library(io_websocket STATIC src/ws/io_websocket.c)
+target_include_directories(io_websocket PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(io_websocket PUBLIC ${WOLFSSL_INCLUDE_DIRS})
+target_link_directories(io_websocket PUBLIC ${WOLFSSL_LIBRARY_DIRS})
+target_link_libraries(io_websocket PUBLIC ${WOLFSSL_LIBRARIES})
+
+io_add_test(test_io_websocket tests/unit/test_io_websocket.c io_websocket)
+target_include_directories(test_io_websocket PRIVATE ${WOLFSSL_INCLUDE_DIRS})
+target_link_directories(test_io_websocket PRIVATE ${WOLFSSL_LIBRARY_DIRS})
+target_link_libraries(test_io_websocket PRIVATE ${WOLFSSL_LIBRARIES})
