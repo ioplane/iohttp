@@ -868,6 +868,20 @@ if(BUILD_TESTING AND TARGET unity)
     )
     add_test(NAME test_signal COMMAND test_signal)
 
+    add_executable(test_request_id tests/integration/test_request_id.c)
+    target_include_directories(test_request_id PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_request_id PRIVATE
+        unity io_server io_loop io_conn io_ctx
+        io_http1 io_request io_response
+        io_router io_radix io_middleware
+        io_route_group io_route_inspect io_route_meta
+        io_log
+    )
+    target_compile_options(test_request_id PRIVATE
+        -Wno-missing-prototypes -Wno-missing-declarations
+    )
+    add_test(NAME test_request_id COMMAND test_request_id)
+
     add_executable(test_tls_pipeline tests/integration/test_tls_pipeline.c)
     target_include_directories(test_tls_pipeline PRIVATE
         ${CMAKE_SOURCE_DIR}/src ${WOLFSSL_INCLUDE_DIRS})

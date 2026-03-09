@@ -359,6 +359,23 @@ static int dispatch_request(io_server_t *srv, io_conn_t *conn, io_request_t *req
         return rc;
     }
 
+    /* Generate or propagate request ID */
+    const char *incoming_id = io_request_header(req, "X-Request-Id");
+    if (incoming_id != nullptr) {
+        (void)io_ctx_set(&ctx, "request_id", (void *)incoming_id);
+        (void)io_response_set_header(&resp, "X-Request-Id", incoming_id);
+    } else {
+        uint32_t r1 = arc4random();
+        uint32_t r2 = arc4random();
+        uint32_t r3 = arc4random();
+        uint32_t r4 = arc4random();
+        char *rid = io_ctx_sprintf(&ctx, "%08x%08x%08x%08x", r1, r2, r3, r4);
+        if (rid != nullptr) {
+            (void)io_ctx_set(&ctx, "request_id", rid);
+            (void)io_response_set_header(&resp, "X-Request-Id", rid);
+        }
+    }
+
     if (srv->router != nullptr) {
         io_route_match_t m = io_router_dispatch(srv->router, req->method, req->path, req->path_len);
         if (m.status == IO_MATCH_FOUND && m.handler != nullptr) {
