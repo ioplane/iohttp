@@ -723,6 +723,193 @@ void test_http2_rapid_reset_protection(void)
     io_http2_session_destroy(server);
 }
 
+/* ---- Client-side response capture for body verification ---- */
+
+typedef struct {
+    uint8_t body[4096];
+    size_t body_len;
+    uint16_t status;
+    bool completed;
+} client_resp_t;
+
+static int on_client_header_cb(nghttp2_session *session, const nghttp2_frame *frame,
+                                const uint8_t *name, size_t namelen, const uint8_t *value,
+                                size_t valuelen, uint8_t flags, void *user_data)
+{
+    (void)session;
+    (void)flags;
+    client_resp_t *cr = user_data;
+    if (frame->hd.type == NGHTTP2_HEADERS && namelen == 7 && memcmp(name, ":status", 7) == 0) {
+        cr->status = 0;
+        for (size_t i = 0; i < valuelen; i++) {
+            cr->status = (uint16_t)(cr->status * 10 + (value[i] - '0'));
+        }
+    }
+    return 0;
+}
+
+static int on_client_data_chunk_cb(nghttp2_session *session, uint8_t flags, int32_t stream_id,
+                                    const uint8_t *data, size_t len, void *user_data)
+{
+    (void)session;
+    (void)flags;
+    (void)stream_id;
+    client_resp_t *cr = user_data;
+    if (cr->body_len + len <= sizeof(cr->body)) {
+        memcpy(cr->body + cr->body_len, data, len);
+        cr->body_len += len;
+    }
+    return 0;
+}
+
+static int on_client_frame_recv_cb(nghttp2_session *session, const nghttp2_frame *frame,
+                                    void *user_data)
+{
+    (void)session;
+    client_resp_t *cr = user_data;
+    if ((frame->hd.type == NGHTTP2_HEADERS || frame->hd.type == NGHTTP2_DATA) &&
+        (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)) {
+        cr->completed = true;
+    }
+    return 0;
+}
+
+static nghttp2_session *make_client_with_resp(client_resp_t *cr)
+{
+    nghttp2_session_callbacks *cbs;
+    nghttp2_session_callbacks_new(&cbs);
+    nghttp2_session_callbacks_set_on_header_callback(cbs, on_client_header_cb);
+    nghttp2_session_callbacks_set_on_data_chunk_recv_callback(cbs, on_client_data_chunk_cb);
+    nghttp2_session_callbacks_set_on_frame_recv_callback(cbs, on_client_frame_recv_cb);
+
+    nghttp2_session *client;
+    nghttp2_session_client_new(&client, cbs, cr);
+    nghttp2_session_callbacks_del(cbs);
+    return client;
+}
+
+/**
+ * Regression test for heap-use-after-free in HTTP/2 response body.
+ *
+ * The bug: submit_response() saved a pointer to resp->body in h2_stream_data,
+ * then io_response_destroy() freed resp->body, and nghttp2 later called
+ * resp_data_read_cb which read the freed memory.
+ *
+ * This test verifies the body is still readable after the response is destroyed
+ * by flushing the session (which triggers resp_data_read_cb) and checking that
+ * the client receives the correct body content.
+ */
+void test_http2_body_lifetime_after_response_destroy(void)
+{
+    /* Use a distinct body string to verify correct content, not stale memory */
+    const char *body_str = "BODY_LIFETIME_CHECK_12345678";
+    size_t body_len = strlen(body_str);
+
+    test_ctx_t ctx = {.request_count = 0,
+                      .has_response = true,
+                      .resp_status = 200,
+                      .resp_content_type = "text/plain",
+                      .resp_body = (const uint8_t *)body_str,
+                      .resp_body_len = body_len};
+
+    client_resp_t cr = {.body_len = 0, .status = 0, .completed = false};
+
+    io_http2_session_t *server = io_http2_session_create(nullptr, on_request_cb, &ctx);
+    TEST_ASSERT_NOT_NULL(server);
+    nghttp2_session *client = make_client_with_resp(&cr);
+    TEST_ASSERT_NOT_NULL(client);
+
+    /* Exchange connection preface */
+    {
+        nghttp2_settings_entry iv[] = {
+            {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, 100},
+            {NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535},
+        };
+        nghttp2_submit_settings(client, NGHTTP2_FLAG_NONE, iv, 2);
+
+        /* Client sends preface: we need to manually capture and forward */
+        const uint8_t *send_data;
+        nghttp2_ssize send_len;
+        uint8_t buf[65536];
+        size_t total = 0;
+        while ((send_len = nghttp2_session_mem_send2(client, &send_data)) > 0) {
+            memcpy(buf + total, send_data, (size_t)send_len);
+            total += (size_t)send_len;
+        }
+
+        /* Feed to server */
+        ssize_t consumed = io_http2_on_recv(server, buf, total);
+        TEST_ASSERT_GREATER_THAN(0, consumed);
+
+        /* Flush server (SETTINGS + SETTINGS ACK) */
+        const uint8_t *out;
+        size_t out_len;
+        TEST_ASSERT_EQUAL_INT(0, io_http2_flush(server, &out, &out_len));
+
+        /* Feed server output to client */
+        nghttp2_session_mem_recv2(client, out, out_len);
+
+        /* Client sends SETTINGS ACK */
+        total = 0;
+        while ((send_len = nghttp2_session_mem_send2(client, &send_data)) > 0) {
+            memcpy(buf + total, send_data, (size_t)send_len);
+            total += (size_t)send_len;
+        }
+        if (total > 0) {
+            (void)io_http2_on_recv(server, buf, total);
+            (void)io_http2_flush(server, &out, &out_len);
+            if (out_len > 0) {
+                nghttp2_session_mem_recv2(client, out, out_len);
+            }
+        }
+    }
+
+    /* Client submits GET request */
+    nghttp2_nv nva[] = {
+        {(uint8_t *)":method", (uint8_t *)"GET", 7, 3, NGHTTP2_NV_FLAG_NONE},
+        {(uint8_t *)":path", (uint8_t *)"/body-test", 5, 10, NGHTTP2_NV_FLAG_NONE},
+        {(uint8_t *)":scheme", (uint8_t *)"https", 7, 5, NGHTTP2_NV_FLAG_NONE},
+        {(uint8_t *)":authority", (uint8_t *)"localhost", 10, 9, NGHTTP2_NV_FLAG_NONE},
+    };
+    int32_t stream_id = nghttp2_submit_request2(client, nullptr, nva, 4, nullptr, nullptr);
+    TEST_ASSERT_GREATER_THAN(0, stream_id);
+
+    /* Send client request frames */
+    const uint8_t *send_data;
+    nghttp2_ssize send_len;
+    uint8_t req_buf[65536];
+    size_t req_total = 0;
+    while ((send_len = nghttp2_session_mem_send2(client, &send_data)) > 0) {
+        memcpy(req_buf + req_total, send_data, (size_t)send_len);
+        req_total += (size_t)send_len;
+    }
+
+    /* Feed request to server — this triggers on_frame_recv_cb which calls:
+     *   submit_response() → saves body pointer → io_response_destroy() → frees body
+     * Without the fix, resp_data_read_cb would read freed memory. */
+    ssize_t consumed = io_http2_on_recv(server, req_buf, req_total);
+    TEST_ASSERT_GREATER_THAN(0, consumed);
+    TEST_ASSERT_EQUAL_INT(1, ctx.request_count);
+
+    /* Flush server — THIS triggers resp_data_read_cb via nghttp2_session_mem_send2.
+     * Under ASan, this would crash with heap-use-after-free before the fix. */
+    const uint8_t *resp_out;
+    size_t resp_out_len;
+    TEST_ASSERT_EQUAL_INT(0, io_http2_flush(server, &resp_out, &resp_out_len));
+    TEST_ASSERT_GREATER_THAN(0, resp_out_len);
+
+    /* Feed server response to client and verify body content */
+    nghttp2_session_mem_recv2(client, resp_out, resp_out_len);
+
+    TEST_ASSERT_TRUE(cr.completed);
+    TEST_ASSERT_EQUAL_UINT16(200, cr.status);
+    TEST_ASSERT_EQUAL_size_t(body_len, cr.body_len);
+    TEST_ASSERT_EQUAL_MEMORY(body_str, cr.body, body_len);
+
+    nghttp2_session_del(client);
+    io_http2_session_destroy(server);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -741,6 +928,7 @@ int main(void)
     RUN_TEST(test_http2_rst_stream);
     RUN_TEST(test_http2_max_concurrent_streams);
     RUN_TEST(test_http2_rapid_reset_protection);
+    RUN_TEST(test_http2_body_lifetime_after_response_destroy);
 
     return UNITY_END();
 }

@@ -60,11 +60,19 @@ static char *arena_copy(h2_arena_t *a, const char *src, size_t len)
     return dst;
 }
 
+/* ---- Response data provider ---- */
+
+typedef struct h2_resp_data {
+    uint8_t *body; /* owned — transferred from io_response_t in submit_response() */
+    size_t body_len;
+    size_t offset;
+} h2_resp_data_t;
+
 /* ---- Per-stream data ---- */
 
-typedef struct h2_resp_data h2_resp_data_t;
+typedef struct h2_stream_data h2_stream_data_t;
 
-typedef struct {
+struct h2_stream_data {
     io_request_t request;
     h2_arena_t arena;  /* owns all string copies for header names/values/path/etc */
     uint8_t *body_buf; /* dynamically allocated body accumulator */
@@ -73,7 +81,8 @@ typedef struct {
     int32_t stream_id;
     bool headers_done;         /* HEADERS frame fully received */
     h2_resp_data_t *resp_data; /* response data provider — freed with stream */
-} h2_stream_data_t;
+    h2_stream_data_t *next;    /* intrusive list for session-level cleanup */
+};
 
 /* ---- Session (opaque) ---- */
 
@@ -94,6 +103,9 @@ struct io_http2_session {
 
     /* GOAWAY state */
     bool goaway_sent;
+
+    /* All active streams — for cleanup on session destroy */
+    h2_stream_data_t *streams;
 };
 
 /* ---- Helpers ---- */
@@ -117,7 +129,10 @@ static void stream_data_free(h2_stream_data_t *sd)
     if (sd == nullptr) {
         return;
     }
-    free(sd->resp_data);
+    if (sd->resp_data != nullptr) {
+        free((void *)sd->resp_data->body); /* owns the transferred response body */
+        free(sd->resp_data);
+    }
     free(sd->arena.buf);
     free(sd->body_buf);
     free(sd);
@@ -149,12 +164,6 @@ static int output_buf_append(io_http2_session_t *session, const uint8_t *data, s
 
 /* ---- Response data provider callback ---- */
 
-struct h2_resp_data {
-    const uint8_t *body;
-    size_t body_len;
-    size_t offset;
-};
-
 static nghttp2_ssize resp_data_read_cb(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
                                        size_t length, uint32_t *data_flags,
                                        nghttp2_data_source *source, void *user_data)
@@ -180,8 +189,7 @@ static nghttp2_ssize resp_data_read_cb(nghttp2_session *session, int32_t stream_
 }
 
 /* Helper: submit a response for a stream */
-static int submit_response(io_http2_session_t *session, int32_t stream_id,
-                           const io_response_t *resp)
+static int submit_response(io_http2_session_t *session, int32_t stream_id, io_response_t *resp)
 {
     /* Build :status pseudo-header */
     char status_str[4];
@@ -250,9 +258,15 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id,
             rv = -ENOMEM;
             goto cleanup;
         }
+        /* Transfer body ownership: rd takes over resp's body pointer
+         * so it remains valid when nghttp2 calls resp_data_read_cb
+         * after io_response_destroy() frees resp. */
         rd->body = resp->body;
         rd->body_len = resp->body_len;
         rd->offset = 0;
+        resp->body = nullptr; /* prevent double-free in io_response_destroy */
+        resp->body_len = 0;
+        resp->body_capacity = 0;
 
         nghttp2_data_provider2 data_prd = {
             .source = {.ptr = rd},
@@ -293,7 +307,7 @@ cleanup:
 static int on_begin_headers_cb(nghttp2_session *session, const nghttp2_frame *frame,
                                void *user_data)
 {
-    (void)user_data;
+    io_http2_session_t *h2 = user_data;
 
     if (frame->hd.type != NGHTTP2_HEADERS || frame->headers.cat != NGHTTP2_HCAT_REQUEST) {
         return 0;
@@ -303,6 +317,10 @@ static int on_begin_headers_cb(nghttp2_session *session, const nghttp2_frame *fr
     if (sd == nullptr) {
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }
+
+    /* Track in session list for cleanup on destroy */
+    sd->next = h2->streams;
+    h2->streams = sd;
 
     nghttp2_session_set_stream_user_data(session, frame->hd.stream_id, sd);
     return 0;
@@ -482,11 +500,22 @@ static int on_stream_close_cb(nghttp2_session *session, int32_t stream_id, uint3
                               void *user_data)
 {
     (void)error_code;
-    (void)user_data;
+    io_http2_session_t *h2 = user_data;
 
     h2_stream_data_t *sd = nghttp2_session_get_stream_user_data(session, stream_id);
     if (sd != nullptr) {
         nghttp2_session_set_stream_user_data(session, stream_id, nullptr);
+
+        /* Remove from session stream list */
+        h2_stream_data_t **pp = &h2->streams;
+        while (*pp != nullptr) {
+            if (*pp == sd) {
+                *pp = sd->next;
+                break;
+            }
+            pp = &(*pp)->next;
+        }
+
         stream_data_free(sd);
     }
 
@@ -577,6 +606,16 @@ void io_http2_session_destroy(io_http2_session_t *session)
     if (session->ng_session != nullptr) {
         nghttp2_session_del(session->ng_session);
     }
+
+    /* Free any streams not closed via on_stream_close_cb
+     * (nghttp2_session_del does not trigger close callbacks) */
+    h2_stream_data_t *sd = session->streams;
+    while (sd != nullptr) {
+        h2_stream_data_t *next = sd->next;
+        stream_data_free(sd);
+        sd = next;
+    }
+
     free(session->out_buf);
     free(session);
 }
