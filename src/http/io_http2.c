@@ -275,12 +275,14 @@ static int submit_response(io_http2_session_t *session, int32_t stream_id, io_re
 
         rv = nghttp2_submit_response2(session->ng_session, stream_id, nva, nva_count, &data_prd);
         if (rv != 0) {
+            free(rd->body);
             free(rd);
         } else {
             /* Store rd in stream data so it is freed when the stream closes */
             h2_stream_data_t *sd =
                 nghttp2_session_get_stream_user_data(session->ng_session, stream_id);
             if (sd == nullptr) {
+                free(rd->body);
                 free(rd);
             } else {
                 sd->resp_data = rd;
