@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -35,6 +36,8 @@ struct io_server {
     io_server_on_request_fn on_request;
     void *on_request_data;
     int listen_fd;
+    int signal_fd;                      /**< signalfd for SIGTERM/SIGQUIT, -1 if not set up */
+    struct signalfd_siginfo siginfo_buf; /**< signal read buffer */
     bool listening;
     bool accepting; /* multishot accept armed */
     bool stopped;
@@ -94,6 +97,7 @@ io_server_t *io_server_create(const io_server_config_t *cfg)
 
     srv->config = *cfg;
     srv->listen_fd = -1;
+    srv->signal_fd = -1;
     srv->listening = false;
     srv->accepting = false;
     srv->stopped = false;
@@ -124,6 +128,11 @@ void io_server_destroy(io_server_t *srv)
 {
     if (srv == nullptr) {
         return;
+    }
+
+    if (srv->signal_fd >= 0) {
+        close(srv->signal_fd);
+        srv->signal_fd = -1;
     }
 
     if (srv->listen_fd >= 0) {
@@ -747,6 +756,26 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                     (void)arm_close(srv, conn);
                 }
             }
+        } else if (op == IO_OP_SIGNAL) {
+            if (cqe->res > 0) {
+                uint32_t signo = srv->siginfo_buf.ssi_signo;
+                if (signo == SIGQUIT) {
+                    (void)io_server_shutdown(srv, IO_SHUTDOWN_IMMEDIATE);
+                } else if (signo == SIGTERM) {
+                    (void)io_server_shutdown(srv, IO_SHUTDOWN_DRAIN);
+                }
+            }
+
+            /* Re-arm signal read if not stopped */
+            if (!srv->stopped && srv->signal_fd >= 0) {
+                struct io_uring_sqe *sig_sqe = io_uring_get_sqe(ring);
+                if (sig_sqe != nullptr) {
+                    io_uring_prep_read(sig_sqe, srv->signal_fd, &srv->siginfo_buf,
+                                       sizeof(srv->siginfo_buf), 0);
+                    io_uring_sqe_set_data64(sig_sqe,
+                                            IO_ENCODE_USERDATA(0, IO_OP_SIGNAL));
+                }
+            }
         }
 
         processed++;
@@ -770,11 +799,43 @@ int io_server_run(io_server_t *srv)
         }
     }
 
+    /* Block SIGTERM + SIGQUIT and create signalfd for io_uring-based handling */
+    sigset_t mask;
+    sigset_t old_mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGQUIT);
+    sigprocmask(SIG_BLOCK, &mask, &old_mask);
+
+    srv->signal_fd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+    if (srv->signal_fd >= 0) {
+        struct io_uring *ring = io_loop_ring(srv->loop);
+        struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+        if (sqe != nullptr) {
+            io_uring_prep_read(sqe, srv->signal_fd, &srv->siginfo_buf,
+                               sizeof(srv->siginfo_buf), 0);
+            io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(0, IO_OP_SIGNAL));
+        }
+    }
+
     while (!srv->stopped) {
         int ret = io_server_run_once(srv, 1000);
         if (ret < 0 && ret != -ETIME && ret != -EINTR) {
+            /* Clean up signalfd before returning error */
+            if (srv->signal_fd >= 0) {
+                close(srv->signal_fd);
+                srv->signal_fd = -1;
+                sigprocmask(SIG_SETMASK, &old_mask, nullptr);
+            }
             return ret;
         }
+    }
+
+    /* Close signalfd and restore signal mask */
+    if (srv->signal_fd >= 0) {
+        close(srv->signal_fd);
+        srv->signal_fd = -1;
+        sigprocmask(SIG_SETMASK, &old_mask, nullptr);
     }
 
     return 0;
