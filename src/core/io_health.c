@@ -17,6 +17,64 @@
 #include <yyjson.h>
 #endif
 
+/* ---- JSON escape helper (for non-yyjson fallback) ---- */
+
+#ifndef IOHTTP_HAVE_YYJSON
+
+/**
+ * Escape a string for JSON output. Handles " and \ characters.
+ * Writes at most dst_size-1 bytes and always null-terminates.
+ * Returns the number of characters that would have been written
+ * (excluding NUL), or -1 on nullptr input.
+ */
+static int json_escape(char *dst, size_t dst_size, const char *src)
+{
+    if (dst == nullptr || src == nullptr || dst_size == 0) {
+        return -1;
+    }
+
+    size_t written = 0;
+    for (const char *p = src; *p != '\0'; p++) {
+        if (*p == '"' || *p == '\\') {
+            if (written + 2 >= dst_size) {
+                dst[written] = '\0';
+                return -1;
+            }
+            dst[written++] = '\\';
+            dst[written++] = *p;
+        } else if ((unsigned char)*p < 0x20) {
+            /* Control characters: emit \uXXXX */
+            if (written + 6 >= dst_size) {
+                dst[written] = '\0';
+                return -1;
+            }
+            int n = snprintf(dst + written, dst_size - written, "\\u%04x",
+                             (unsigned int)(unsigned char)*p);
+            if (n < 0) {
+                dst[written] = '\0';
+                return -1;
+            }
+            written += (size_t)n;
+        } else {
+            if (written + 1 >= dst_size) {
+                dst[written] = '\0';
+                return -1;
+            }
+            dst[written++] = *p;
+        }
+    }
+    dst[written] = '\0';
+    return (int)written;
+}
+
+/** Cached result from a single health checker invocation. */
+typedef struct {
+    int rc;
+    const char *msg;
+} health_check_result_t;
+
+#endif /* !IOHTTP_HAVE_YYJSON */
+
 /* ---- File-static state ---- */
 
 static const io_health_config_t *s_health_cfg;
@@ -124,36 +182,40 @@ static int live_handler(io_ctx_t *c)
     return ret;
 
 #else
-    /* Simple string concat fallback without yyjson */
-    char buf[1024];
-    int off = snprintf(buf, sizeof(buf), "{\"status\":");
-
-    /* First pass: run checks to determine overall status */
-    for (uint32_t i = 0; i < s_health_cfg->checker_count; i++) {
-        const char *msg = nullptr;
-        int rc = s_health_cfg->checkers[i].check(&msg, s_health_cfg->checkers[i].user_data);
-        if (rc != 0) {
-            all_healthy = false;
-            break;
-        }
-    }
-
-    off += snprintf(buf + off, sizeof(buf) - (size_t)off,
-                    "\"%s\",\"checks\":{", all_healthy ? "ok" : "degraded");
+    /* Simple string concat fallback without yyjson.
+     * Run all checkers once and cache results to avoid double invocation. */
+    health_check_result_t results[IO_HEALTH_MAX_CHECKS];
 
     for (uint32_t i = 0; i < s_health_cfg->checker_count; i++) {
         const io_health_checker_t *chk = &s_health_cfg->checkers[i];
-        const char *msg = nullptr;
-        int rc = chk->check(&msg, chk->user_data);
+        results[i].msg = nullptr;
+        results[i].rc = chk->check(&results[i].msg, chk->user_data);
+        if (results[i].rc != 0) {
+            all_healthy = false;
+        }
+    }
+
+    char buf[1024];
+    int off = snprintf(buf, sizeof(buf), "{\"status\":\"%s\",\"checks\":{",
+                       all_healthy ? "ok" : "degraded");
+
+    char escaped[256];
+
+    for (uint32_t i = 0; i < s_health_cfg->checker_count; i++) {
+        const io_health_checker_t *chk = &s_health_cfg->checkers[i];
 
         if (i > 0) {
             off += snprintf(buf + off, sizeof(buf) - (size_t)off, ",");
         }
 
+        json_escape(escaped, sizeof(escaped), chk->name);
         off += snprintf(buf + off, sizeof(buf) - (size_t)off,
-                        "\"%s\":{\"status\":\"%s\"", chk->name, rc == 0 ? "ok" : "fail");
-        if (msg != nullptr) {
-            off += snprintf(buf + off, sizeof(buf) - (size_t)off, ",\"message\":\"%s\"", msg);
+                        "\"%s\":{\"status\":\"%s\"", escaped,
+                        results[i].rc == 0 ? "ok" : "fail");
+        if (results[i].msg != nullptr) {
+            json_escape(escaped, sizeof(escaped), results[i].msg);
+            off += snprintf(buf + off, sizeof(buf) - (size_t)off,
+                            ",\"message\":\"%s\"", escaped);
         }
         off += snprintf(buf + off, sizeof(buf) - (size_t)off, "}");
     }

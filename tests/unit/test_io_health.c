@@ -254,6 +254,67 @@ void test_health_live_with_checkers(void)
     io_response_destroy(&resp);
 }
 
+/* ---- Ready handler returns 503 when draining ---- */
+
+void test_health_ready_returns_503_when_draining(void)
+{
+    io_server_config_t srv_cfg;
+    io_server_config_init(&srv_cfg);
+    srv_cfg.listen_port = 9999; /* validation requires > 0 */
+
+    io_server_t *srv = io_server_create(&srv_cfg);
+    TEST_ASSERT_NOT_NULL(srv);
+
+    io_health_config_t cfg;
+    io_health_config_init(&cfg);
+
+    int rc = io_health_register(router, srv, &cfg);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+
+    /* Before draining: should return 200 */
+    io_route_match_t m = io_router_dispatch(router, IO_METHOD_GET, "/ready", 6);
+    TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
+    TEST_ASSERT_NOT_NULL(m.handler);
+
+    io_request_t req;
+    io_request_init(&req);
+    io_response_t resp;
+    TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
+
+    io_ctx_t ctx;
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&ctx, &req, &resp, nullptr));
+
+    rc = m.handler(&ctx);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_EQUAL_UINT16(200, resp.status);
+
+    io_ctx_destroy(&ctx);
+    io_response_destroy(&resp);
+
+    /* Set server to draining state */
+    io_server_stop(srv);
+    TEST_ASSERT_TRUE(io_server_is_draining(srv));
+
+    /* After draining: should return 503 */
+    TEST_ASSERT_EQUAL_INT(0, io_response_init(&resp));
+    TEST_ASSERT_EQUAL_INT(0, io_ctx_init(&ctx, &req, &resp, nullptr));
+
+    rc = m.handler(&ctx);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_EQUAL_UINT16(503, resp.status);
+
+    /* Verify body contains "unavailable" */
+    char body[256];
+    size_t copy_len = resp.body_len < sizeof(body) - 1 ? resp.body_len : sizeof(body) - 1;
+    memcpy(body, resp.body, copy_len);
+    body[copy_len] = '\0';
+    TEST_ASSERT_NOT_NULL(strstr(body, "\"unavailable\""));
+
+    io_ctx_destroy(&ctx);
+    io_response_destroy(&resp);
+    io_server_destroy(srv);
+}
+
 /* ---- Test runner ---- */
 
 int main(void)
@@ -269,6 +330,7 @@ int main(void)
     RUN_TEST(test_health_custom_paths);
     RUN_TEST(test_health_register_null_args);
     RUN_TEST(test_health_live_with_checkers);
+    RUN_TEST(test_health_ready_returns_503_when_draining);
 
     return UNITY_END();
 }
