@@ -3,8 +3,8 @@
  * @brief Unit tests for host-based virtual routing dispatcher.
  */
 
-#include "router/io_vhost.h"
 #include "router/io_router.h"
+#include "router/io_vhost.h"
 
 #include <errno.h>
 #include <string.h>
@@ -32,9 +32,13 @@ static io_router_t *make_router(void)
 
 /* ---- Test fixtures ---- */
 
-void setUp(void) {}
+void setUp(void)
+{
+}
 
-void tearDown(void) {}
+void tearDown(void)
+{
+}
 
 /* ---- Tests ---- */
 
@@ -270,8 +274,7 @@ void test_vhost_dispatch_not_found_path(void)
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     /* Host matches but path does not exist in router */
-    io_route_match_t m =
-        io_vhost_dispatch(v, IO_METHOD_GET, "api.example.com", "/nonexistent", 12);
+    io_route_match_t m = io_vhost_dispatch(v, IO_METHOD_GET, "api.example.com", "/nonexistent", 12);
     TEST_ASSERT_EQUAL_INT(IO_MATCH_NOT_FOUND, m.status);
 
     io_router_destroy(r);

@@ -35,15 +35,18 @@ void io_vhost_destroy(io_vhost_t *v)
 
 int io_vhost_add(io_vhost_t *v, const char *host, io_router_t *router)
 {
-    if (v == nullptr || host == nullptr || router == nullptr)
+    if (v == nullptr || host == nullptr || router == nullptr) {
         return -EINVAL;
+    }
 
-    if (v->count >= IO_VHOST_MAX_HOSTS)
+    if (v->count >= IO_VHOST_MAX_HOSTS) {
         return -ENOSPC;
+    }
 
     size_t len = strnlen(host, 256);
-    if (len == 0 || len >= 256)
+    if (len == 0 || len >= 256) {
         return -EINVAL;
+    }
 
     io_vhost_entry_t *entry = &v->entries[v->count];
     memcpy(entry->host, host, len);
@@ -57,8 +60,9 @@ int io_vhost_add(io_vhost_t *v, const char *host, io_router_t *router)
 
 void io_vhost_set_default(io_vhost_t *v, io_router_t *router)
 {
-    if (v != nullptr)
+    if (v != nullptr) {
         v->default_router = router;
+    }
 }
 
 /**
@@ -67,8 +71,9 @@ void io_vhost_set_default(io_vhost_t *v, io_router_t *router)
  */
 static size_t strip_port(const char *host, size_t len)
 {
-    if (len == 0)
+    if (len == 0) {
         return 0;
+    }
 
     /* IPv6 literal: [::1]:8080 — find closing bracket first */
     if (host[0] == '[') {
@@ -83,8 +88,9 @@ static size_t strip_port(const char *host, size_t len)
 
     /* Regular host: find last colon */
     for (size_t i = len; i > 0; i--) {
-        if (host[i - 1] == ':')
+        if (host[i - 1] == ':') {
             return i - 1;
+        }
     }
 
     return len;
@@ -101,8 +107,9 @@ static bool wildcard_match(const char *pattern, const char *host, size_t host_le
     size_t suffix_len = strlen(suffix);
 
     /* Host must be longer than suffix (needs at least one char before ".suffix") */
-    if (host_len <= suffix_len)
+    if (host_len <= suffix_len) {
         return false;
+    }
 
     /* Compare the suffix portion case-insensitively */
     return strncasecmp(host + host_len - suffix_len, suffix, suffix_len) == 0;
@@ -115,8 +122,9 @@ io_route_match_t io_vhost_dispatch(const io_vhost_t *v, io_method_t method, cons
     memset(&result, 0, sizeof(result));
     result.status = IO_MATCH_NOT_FOUND;
 
-    if (v == nullptr)
+    if (v == nullptr) {
         return result;
+    }
 
     io_router_t *matched_router = nullptr;
 
@@ -126,11 +134,11 @@ io_route_match_t io_vhost_dispatch(const io_vhost_t *v, io_method_t method, cons
 
         /* Pass 1: exact match */
         for (uint32_t i = 0; i < v->count; i++) {
-            if (v->entries[i].is_wildcard)
+            if (v->entries[i].is_wildcard) {
                 continue;
+            }
             size_t entry_len = strlen(v->entries[i].host);
-            if (entry_len == host_len &&
-                strncasecmp(v->entries[i].host, host, host_len) == 0) {
+            if (entry_len == host_len && strncasecmp(v->entries[i].host, host, host_len) == 0) {
                 matched_router = v->entries[i].router;
                 break;
             }
@@ -139,8 +147,9 @@ io_route_match_t io_vhost_dispatch(const io_vhost_t *v, io_method_t method, cons
         /* Pass 2: wildcard match */
         if (matched_router == nullptr) {
             for (uint32_t i = 0; i < v->count; i++) {
-                if (!v->entries[i].is_wildcard)
+                if (!v->entries[i].is_wildcard) {
                     continue;
+                }
                 if (wildcard_match(v->entries[i].host, host, host_len)) {
                     matched_router = v->entries[i].router;
                     break;
@@ -150,18 +159,21 @@ io_route_match_t io_vhost_dispatch(const io_vhost_t *v, io_method_t method, cons
     }
 
     /* Fall back to default router */
-    if (matched_router == nullptr)
+    if (matched_router == nullptr) {
         matched_router = v->default_router;
+    }
 
-    if (matched_router != nullptr)
+    if (matched_router != nullptr) {
         result = io_router_dispatch(matched_router, method, path, path_len);
+    }
 
     return result;
 }
 
 uint32_t io_vhost_count(const io_vhost_t *v)
 {
-    if (v == nullptr)
+    if (v == nullptr) {
         return 0;
+    }
     return v->count;
 }

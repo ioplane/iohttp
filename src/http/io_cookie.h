@@ -24,9 +24,9 @@ typedef enum : uint8_t {
 typedef struct {
     const char *name;
     const char *value;
-    const char *domain;  /* nullable */
-    const char *path;    /* nullable */
-    int64_t max_age;     /* seconds, -1 = session (omit Max-Age), 0 = delete */
+    const char *domain; /* nullable */
+    const char *path;   /* nullable */
+    int64_t max_age;    /* seconds, -1 = session (omit Max-Age), 0 = delete */
     io_same_site_t same_site;
     bool secure;
     bool http_only;
