@@ -389,6 +389,13 @@ static int dispatch_request(io_server_t *srv, io_conn_t *conn, io_request_t *req
 
     if (srv->router != nullptr) {
         io_route_match_t m = io_router_dispatch(srv->router, req->method, req->path, req->path_len);
+
+        /* Apply per-route timeout overrides for keepalive phase */
+        if (m.status == IO_MATCH_FOUND && m.opts != nullptr) {
+            conn->route_body_timeout_ms = m.opts->body_timeout_ms;
+            conn->route_keepalive_timeout_ms = m.opts->keepalive_timeout_ms;
+        }
+
         if (m.status == IO_MATCH_FOUND && m.handler != nullptr) {
             req->param_count = m.param_count;
             for (uint32_t i = 0; i < m.param_count && i < IO_MAX_PATH_PARAMS; i++) {
@@ -760,14 +767,12 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
 
                 /* Wait for full body if Content-Length specified */
                 if (req.content_length > 0 && body_avail < req.content_length) {
-                    /* Quick route lookup for timeout overrides */
+                    /* Apply per-route body timeout override */
                     if (srv->router != nullptr) {
                         io_route_match_t m = io_router_dispatch(
                             srv->router, req.method, req.path, req.path_len);
                         if (m.status == IO_MATCH_FOUND && m.opts != nullptr) {
                             conn->route_body_timeout_ms = m.opts->body_timeout_ms;
-                            conn->route_keepalive_timeout_ms =
-                                m.opts->keepalive_timeout_ms;
                         }
                     }
                     conn->timeout_phase = IO_TIMEOUT_BODY;
@@ -834,9 +839,9 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                     } else if (conn->keep_alive && conn->state == IO_CONN_HTTP_ACTIVE) {
                         conn->timeout_phase = IO_TIMEOUT_KEEPALIVE;
                         conn->recv_len = 0;
+                        (void)arm_recv(srv, conn);
                         conn->route_body_timeout_ms = 0;
                         conn->route_keepalive_timeout_ms = 0;
-                        (void)arm_recv(srv, conn);
                     } else {
                         (void)arm_close(srv, conn);
                     }

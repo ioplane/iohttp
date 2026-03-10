@@ -29,7 +29,6 @@ static int api_handler(io_ctx_t *c)
 void test_route_opts_timeout_defaults_zero(void)
 {
     io_route_opts_t opts = {0};
-    TEST_ASSERT_EQUAL_UINT32(0, opts.header_timeout_ms);
     TEST_ASSERT_EQUAL_UINT32(0, opts.body_timeout_ms);
     TEST_ASSERT_EQUAL_UINT32(0, opts.keepalive_timeout_ms);
 }
@@ -106,13 +105,12 @@ void test_route_keepalive_timeout_override(void)
     io_router_destroy(r);
 }
 
-void test_route_header_timeout_override(void)
+void test_route_all_timeouts_override(void)
 {
     io_router_t *r = io_router_create();
     TEST_ASSERT_NOT_NULL(r);
 
     static const io_route_opts_t opts = {
-        .header_timeout_ms = 5000,
         .body_timeout_ms = 10000,
         .keepalive_timeout_ms = 60000,
     };
@@ -122,7 +120,6 @@ void test_route_header_timeout_override(void)
     io_route_match_t m = io_router_dispatch(r, IO_METHOD_POST, "/all-timeouts", 13);
     TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
     TEST_ASSERT_NOT_NULL(m.opts);
-    TEST_ASSERT_EQUAL_UINT32(5000, m.opts->header_timeout_ms);
     TEST_ASSERT_EQUAL_UINT32(10000, m.opts->body_timeout_ms);
     TEST_ASSERT_EQUAL_UINT32(60000, m.opts->keepalive_timeout_ms);
 
@@ -137,6 +134,6 @@ int main(void)
     RUN_TEST(test_route_timeout_zero_means_server_default);
     RUN_TEST(test_route_no_opts_returns_null);
     RUN_TEST(test_route_keepalive_timeout_override);
-    RUN_TEST(test_route_header_timeout_override);
+    RUN_TEST(test_route_all_timeouts_override);
     return UNITY_END();
 }
