@@ -827,6 +827,19 @@ if(BUILD_TESTING AND TARGET unity)
     )
     add_test(NAME test_middleware_pipeline COMMAND test_middleware_pipeline)
 
+    add_executable(test_health_pipeline tests/integration/test_health_pipeline.c)
+    target_include_directories(test_health_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_health_pipeline PRIVATE
+        unity io_health_test io_server io_loop io_conn io_ctx
+        io_http1 io_request io_response
+        io_router io_radix io_middleware
+        io_route_group io_route_inspect io_route_meta
+    )
+    target_compile_options(test_health_pipeline PRIVATE
+        -Wno-missing-prototypes -Wno-missing-declarations
+    )
+    add_test(NAME test_health_pipeline COMMAND test_health_pipeline)
+
     add_executable(test_keepalive tests/integration/test_keepalive.c)
     target_include_directories(test_keepalive PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_keepalive PRIVATE
