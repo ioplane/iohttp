@@ -34,6 +34,9 @@ typedef enum : uint8_t {
     IO_MATCH_REDIRECT,
 } io_match_status_t;
 
+/* Total storage for all param values copied from normalized path */
+constexpr size_t IO_MAX_PARAM_STORAGE = 512;
+
 typedef struct {
     io_match_status_t status;
     io_handler_fn handler;
@@ -41,8 +44,10 @@ typedef struct {
     const io_route_meta_t *meta; /* route metadata (latest, post-set_meta) */
     io_param_t params[IO_MAX_PATH_PARAMS];
     uint32_t param_count;
-    char allowed_methods[128];           /* "GET, POST, DELETE" for 405 */
-    char redirect_path[IO_MAX_URI_SIZE]; /* for trailing slash redirect */
+    char allowed_methods[128];                /* "GET, POST, DELETE" for 405 */
+    char redirect_path[IO_MAX_URI_SIZE];      /* for trailing slash redirect */
+    char param_storage[IO_MAX_PARAM_STORAGE]; /* stable storage for param values */
+    size_t param_storage_used;
 } io_route_match_t;
 
 /* Opaque router type */

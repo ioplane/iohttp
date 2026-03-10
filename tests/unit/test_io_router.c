@@ -297,7 +297,84 @@ void test_router_null_byte_blocked(void)
     io_router_destroy(r);
 }
 
-/* ---- 5. Conflict detection ---- */
+/* ---- 5. Param lifetime (regression: stack-use-after-return) ---- */
+
+void test_router_param_lifetime_after_dispatch(void)
+{
+    io_router_t *r = io_router_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    int rc = io_router_get(r, "/users/:id", handler_a);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+
+    io_route_match_t m = io_router_dispatch(r, IO_METHOD_GET, "/users/42", strlen("/users/42"));
+    TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
+    TEST_ASSERT_EQUAL_UINT32(1, m.param_count);
+
+    /*
+     * After dispatch returns, the normalized[] stack buffer is gone.
+     * Param values must still be valid (stored in param_storage).
+     */
+    TEST_ASSERT_EQUAL_size_t(2, m.params[0].value_len);
+    TEST_ASSERT_EQUAL_STRING_LEN("42", m.params[0].value, m.params[0].value_len);
+
+    /* Verify NUL termination in param_storage */
+    TEST_ASSERT_EQUAL_CHAR('\0', m.params[0].value[m.params[0].value_len]);
+
+    io_router_destroy(r);
+}
+
+void test_router_multi_param_lifetime_after_dispatch(void)
+{
+    io_router_t *r = io_router_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    int rc = io_router_get(r, "/users/:uid/posts/:pid", handler_a);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+
+    io_route_match_t m =
+        io_router_dispatch(r, IO_METHOD_GET, "/users/7/posts/99", strlen("/users/7/posts/99"));
+    TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
+    TEST_ASSERT_EQUAL_UINT32(2, m.param_count);
+
+    /* Both param values must survive after dispatch returns */
+    TEST_ASSERT_EQUAL_STRING_LEN("7", m.params[0].value, m.params[0].value_len);
+    TEST_ASSERT_EQUAL_STRING_LEN("99", m.params[1].value, m.params[1].value_len);
+
+    /* Values must be NUL-terminated */
+    TEST_ASSERT_EQUAL_CHAR('\0', m.params[0].value[m.params[0].value_len]);
+    TEST_ASSERT_EQUAL_CHAR('\0', m.params[1].value[m.params[1].value_len]);
+
+    /* Values must be stored in param_storage, not pointing at external memory */
+    TEST_ASSERT_TRUE(m.params[0].value >= m.param_storage &&
+                     m.params[0].value < m.param_storage + IO_MAX_PARAM_STORAGE);
+    TEST_ASSERT_TRUE(m.params[1].value >= m.param_storage &&
+                     m.params[1].value < m.param_storage + IO_MAX_PARAM_STORAGE);
+
+    io_router_destroy(r);
+}
+
+void test_router_wildcard_param_lifetime_after_dispatch(void)
+{
+    io_router_t *r = io_router_create();
+    TEST_ASSERT_NOT_NULL(r);
+
+    int rc = io_router_get(r, "/static/*path", handler_a);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+
+    io_route_match_t m =
+        io_router_dispatch(r, IO_METHOD_GET, "/static/css/app.css", strlen("/static/css/app.css"));
+    TEST_ASSERT_EQUAL_INT(IO_MATCH_FOUND, m.status);
+    TEST_ASSERT_EQUAL_UINT32(1, m.param_count);
+
+    /* Wildcard value must survive after dispatch returns */
+    TEST_ASSERT_EQUAL_STRING_LEN("css/app.css", m.params[0].value, m.params[0].value_len);
+    TEST_ASSERT_EQUAL_CHAR('\0', m.params[0].value[m.params[0].value_len]);
+
+    io_router_destroy(r);
+}
+
+/* ---- 6. Conflict detection ---- */
 
 void test_router_conflict_same_level(void)
 {
@@ -358,6 +435,11 @@ int main(void)
     RUN_TEST(test_router_path_normalization);
     RUN_TEST(test_router_path_traversal_blocked);
     RUN_TEST(test_router_null_byte_blocked);
+
+    /* Param lifetime (regression) */
+    RUN_TEST(test_router_param_lifetime_after_dispatch);
+    RUN_TEST(test_router_multi_param_lifetime_after_dispatch);
+    RUN_TEST(test_router_wildcard_param_lifetime_after_dispatch);
 
     /* Conflict detection */
     RUN_TEST(test_router_conflict_same_level);
