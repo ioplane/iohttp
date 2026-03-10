@@ -65,6 +65,10 @@ typedef struct {
     bool tls_done;                       /**< TLS handshake completed */
     io_timeout_phase_t timeout_phase;    /**< current recv timeout phase */
     struct __kernel_timespec timeout_ts; /**< linked timeout spec (must outlive SQE) */
+
+    /* Per-request timeout overrides (0 = use server default) */
+    uint32_t route_body_timeout_ms;
+    uint32_t route_keepalive_timeout_ms;
 } io_conn_t;
 
 /* ---- Opaque pool type ---- */

@@ -195,14 +195,19 @@ static int arm_multishot_accept(io_server_t *srv)
     return 0;
 }
 
-static uint32_t timeout_ms_for_phase(const io_server_t *srv, io_timeout_phase_t phase)
+static uint32_t timeout_ms_for_phase(const io_server_t *srv, const io_conn_t *conn,
+                                     io_timeout_phase_t phase)
 {
     switch (phase) {
     case IO_TIMEOUT_HEADER:
         return srv->config.header_timeout_ms;
     case IO_TIMEOUT_BODY:
+        if (conn != nullptr && conn->route_body_timeout_ms > 0)
+            return conn->route_body_timeout_ms;
         return srv->config.body_timeout_ms;
     case IO_TIMEOUT_KEEPALIVE:
+        if (conn != nullptr && conn->route_keepalive_timeout_ms > 0)
+            return conn->route_keepalive_timeout_ms;
         return srv->config.keepalive_timeout_ms;
     default:
         return 0;
@@ -222,7 +227,7 @@ static int arm_recv(io_server_t *srv, io_conn_t *conn)
     io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(conn->id, IO_OP_RECV));
 
     /* Link a timeout SQE if a timeout phase is set */
-    uint32_t tmo_ms = timeout_ms_for_phase(srv, conn->timeout_phase);
+    uint32_t tmo_ms = timeout_ms_for_phase(srv, conn, conn->timeout_phase);
     if (tmo_ms > 0) {
         struct io_uring_sqe *tsqe = io_uring_get_sqe(ring);
         if (tsqe != nullptr) {
@@ -755,6 +760,16 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
 
                 /* Wait for full body if Content-Length specified */
                 if (req.content_length > 0 && body_avail < req.content_length) {
+                    /* Quick route lookup for timeout overrides */
+                    if (srv->router != nullptr) {
+                        io_route_match_t m = io_router_dispatch(
+                            srv->router, req.method, req.path, req.path_len);
+                        if (m.status == IO_MATCH_FOUND && m.opts != nullptr) {
+                            conn->route_body_timeout_ms = m.opts->body_timeout_ms;
+                            conn->route_keepalive_timeout_ms =
+                                m.opts->keepalive_timeout_ms;
+                        }
+                    }
                     conn->timeout_phase = IO_TIMEOUT_BODY;
                     (void)arm_recv(srv, conn);
                     processed++;
@@ -819,6 +834,8 @@ int io_server_run_once(io_server_t *srv, uint32_t timeout_ms)
                     } else if (conn->keep_alive && conn->state == IO_CONN_HTTP_ACTIVE) {
                         conn->timeout_phase = IO_TIMEOUT_KEEPALIVE;
                         conn->recv_len = 0;
+                        conn->route_body_timeout_ms = 0;
+                        conn->route_keepalive_timeout_ms = 0;
                         (void)arm_recv(srv, conn);
                     } else {
                         (void)arm_close(srv, conn);

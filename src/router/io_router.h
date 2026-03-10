@@ -24,6 +24,9 @@ typedef struct {
     void *oas_operation;         /* for liboas binding */
     uint32_t permissions;        /* bitmask for auth */
     bool auth_required;
+    uint32_t header_timeout_ms;    /**< 0 = use server default */
+    uint32_t body_timeout_ms;      /**< 0 = use server default */
+    uint32_t keepalive_timeout_ms; /**< 0 = use server default */
 } io_route_opts_t;
 
 /* Match result from dispatch */

@@ -307,6 +307,10 @@ if(BUILD_TESTING AND TARGET unity)
     io_add_test(test_io_health tests/unit/test_io_health.c io_health_test io_server io_router io_radix io_ctx io_request io_response)
 endif()
 
+# Sprint 15: Per-route timeout tests
+io_add_test(test_io_route_timeout tests/unit/test_io_route_timeout.c
+    io_router io_radix io_ctx io_request io_response)
+
 # ============================================================================
 # Sprint 1: Server lifecycle management
 # ============================================================================
