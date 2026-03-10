@@ -170,6 +170,84 @@ int io_response_add_header(io_response_t *resp, const char *name, const char *va
     return 0;
 }
 
+/**
+ * Check if a Vary token already exists in a comma-separated header value.
+ * Performs case-insensitive comparison with comma-boundary awareness.
+ */
+static bool vary_token_exists(const char *value, size_t value_len, const char *token,
+                              size_t token_len)
+{
+    size_t pos = 0;
+    while (pos < value_len) {
+        /* skip leading whitespace and commas */
+        while (pos < value_len && (value[pos] == ' ' || value[pos] == ',' || value[pos] == '\t')) {
+            pos++;
+        }
+        if (pos >= value_len) {
+            break;
+        }
+
+        /* find end of this token */
+        size_t start = pos;
+        while (pos < value_len && value[pos] != ',' && value[pos] != ' ' && value[pos] != '\t') {
+            pos++;
+        }
+        size_t len = pos - start;
+
+        if (len == token_len && strncasecmp(&value[start], token, token_len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int io_response_add_vary(io_response_t *resp, const char *token)
+{
+    if (resp == nullptr || token == nullptr) {
+        return -EINVAL;
+    }
+
+    size_t token_len = strnlen(token, IO_MAX_HEADER_SIZE);
+    if (token_len == 0) {
+        return -EINVAL;
+    }
+
+    /* find existing Vary header */
+    constexpr size_t VARY_NAME_LEN = 4;
+    for (uint32_t i = 0; i < resp->header_count; i++) {
+        if (resp->headers[i].name_len == VARY_NAME_LEN &&
+            strncasecmp(resp->headers[i].name, "Vary", VARY_NAME_LEN) == 0) {
+            /* check if token already present */
+            if (vary_token_exists(resp->headers[i].value, resp->headers[i].value_len, token,
+                                  token_len)) {
+                return 0;
+            }
+
+            /* append ", token" to existing value */
+            size_t old_len = resp->headers[i].value_len;
+            size_t new_len = old_len + 2 + token_len; /* ", " + token */
+            char *new_value = malloc(new_len + 1);
+            if (new_value == nullptr) {
+                return -ENOMEM;
+            }
+
+            memcpy(new_value, resp->headers[i].value, old_len);
+            new_value[old_len] = ',';
+            new_value[old_len + 1] = ' ';
+            memcpy(new_value + old_len + 2, token, token_len);
+            new_value[new_len] = '\0';
+
+            free((void *)resp->headers[i].value);
+            resp->headers[i].value = new_value;
+            resp->headers[i].value_len = new_len;
+            return 0;
+        }
+    }
+
+    /* no existing Vary header — set it */
+    return io_response_set_header(resp, "Vary", token);
+}
+
 int io_response_set_body(io_response_t *resp, const uint8_t *body, size_t len)
 {
     if (resp == nullptr) {

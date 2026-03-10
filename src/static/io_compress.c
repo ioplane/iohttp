@@ -270,7 +270,7 @@ int io_compress_response(const io_compress_config_t *cfg, const io_request_t *re
     io_encoding_t enc = io_compress_negotiate(ae);
 
     /* always set Vary so caches know about encoding negotiation */
-    int rc = io_response_set_header(resp, "Vary", "Accept-Encoding");
+    int rc = io_response_add_vary(resp, "Accept-Encoding");
     if (rc < 0) {
         return rc;
     }

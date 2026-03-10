@@ -411,6 +411,10 @@ target_include_directories(io_response PUBLIC ${CMAKE_SOURCE_DIR}/src)
 io_add_test(test_io_request tests/unit/test_io_request.c io_request)
 io_add_test(test_io_response tests/unit/test_io_response.c io_response)
 
+# Sprint 16: Vary header tests
+io_add_test(test_io_vary tests/unit/test_io_vary.c
+    io_response io_request)
+
 # ============================================================================
 # Sprint 3: HTTP/1.1 parser (picohttpparser)
 # ============================================================================

@@ -76,6 +76,14 @@ void io_response_destroy(io_response_t *resp);
  */
 [[nodiscard]] int io_response_set_body(io_response_t *resp, const uint8_t *body, size_t len);
 
+/**
+ * @brief Append a token to the Vary header (avoids duplicates).
+ * @param resp  Response to modify.
+ * @param token Vary token (e.g., "Accept-Encoding").
+ * @return 0 on success, negative errno on error.
+ */
+[[nodiscard]] int io_response_add_vary(io_response_t *resp, const char *token);
+
 /* ---- Convenience builders ---- */
 
 /**
