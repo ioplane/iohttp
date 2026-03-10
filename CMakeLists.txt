@@ -512,6 +512,17 @@ target_include_directories(io_route_meta PUBLIC ${CMAKE_SOURCE_DIR}/src)
 io_add_test(test_io_route_meta tests/unit/test_io_route_meta.c io_route_meta io_route_inspect io_router io_radix io_request io_response io_ctx)
 
 # ============================================================================
+# Sprint 16: Virtual host routing
+# ============================================================================
+
+add_library(io_vhost STATIC src/router/io_vhost.c)
+target_include_directories(io_vhost PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(io_vhost PUBLIC io_router)
+
+io_add_test(test_io_vhost tests/unit/test_io_vhost.c
+    io_vhost io_router io_radix io_ctx io_request io_response)
+
+# ============================================================================
 # Sprint 4: Middleware chain
 # ============================================================================
 
