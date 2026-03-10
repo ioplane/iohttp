@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>503 Service Unavailable - iohttp</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            --error-color: #f39c12;
+        }
+        body {
+            min-height: 100vh;
+            background: var(--primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .error-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 3rem;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            animation: slideIn 0.5s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .error-icon {
+            font-size: 5rem;
+            color: var(--error-color);
+            margin-bottom: 1rem;
+            animation: wrench 2.5s ease infinite;
+        }
+        @keyframes wrench {
+            0% { transform: rotate(0deg); }
+            20% { transform: rotate(30deg); }
+            40% { transform: rotate(0deg); }
+            60% { transform: rotate(30deg); }
+            80% { transform: rotate(0deg); }
+            100% { transform: rotate(0deg); }
+        }
+        .error-code {
+            font-size: 6rem;
+            font-weight: 700;
+            color: var(--error-color);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        .error-title {
+            font-size: 1.8rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .error-message {
+            color: #7f8c8d;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .maintenance-info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+        .maintenance-info i {
+            color: #856404;
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .maintenance-info p {
+            color: #856404;
+            margin: 0;
+        }
+        .btn-retry {
+            background: var(--primary-gradient);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 50px;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 10px;
+        }
+        .btn-retry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(243, 156, 18, 0.4);
+            color: white;
+        }
+        .btn-home {
+            background: transparent;
+            border: 2px solid #e67e22;
+            padding: 12px 30px;
+            border-radius: 50px;
+            color: #e67e22;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-home:hover {
+            background: #e67e22;
+            color: white;
+        }
+        .server-info {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+            color: #95a5a6;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-card">
+        <i class="bi bi-tools error-icon"></i>
+        <div class="error-code">503</div>
+        <h1 class="error-title">Service Unavailable</h1>
+        <div class="maintenance-info">
+            <i class="bi bi-info-circle-fill"></i>
+            <p>The server is temporarily unavailable due to maintenance or high load.</p>
+        </div>
+        <div>
+            <a href="javascript:location.reload()" class="btn-retry">
+                <i class="bi bi-arrow-clockwise"></i>
+                Try Again
+            </a>
+            <a href="/" class="btn-home">
+                <i class="bi bi-house-door"></i>
+                Home
+            </a>
+        </div>
+        <div class="server-info">
+            <i class="bi bi-server"></i> Powered by <strong>iohttp</strong>
+        </div>
+    </div>
+</body>
+</html>

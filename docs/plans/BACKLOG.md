@@ -90,3 +90,41 @@ Useful features if we upgrade later:
 ### BL-4: Add sfparse version tracking
 
 sfparse (RFC 9651 structured fields) has no GitHub releases, only tags. Current: v0.3.0. Monitor for updates.
+
+---
+
+## Sprint Plans
+
+### BL-5: Sprint 13 — Critical Fixes & Sanitizer Green (iohttp)
+
+**Priority:** P0 — CRITICAL memory safety bugs
+**Status:** DONE (merged to main)
+**Plan:** `docs/plans/2026-03-10-sprint-13-critical-fixes.md`
+
+4 tasks — all completed: HTTP/2 UAF fix, router stack-use-after-return fix, PVS warnings, ASan green (46/46).
+
+---
+
+### BL-7: Sprint 14 — Project Hardening
+
+**Priority:** P1 — production-grade open-source standards
+**Status:** DONE (merged to main)
+**Plan:** `docs/plans/2026-03-10-sprint-14-project-hardening.md`
+
+7 tasks — all completed: .clangd, .editorconfig, SECURITY.md, GitHub infra, coverage preset, SPDX headers, quality pipeline.
+
+---
+
+### BL-8: Sprints 15–19 — Feature Roadmap & liboas Integration
+
+**Priority:** P0/P1/P2 — remaining features for 0.1.0 release
+**Status:** Sprint 15 DONE, Sprints 16-19 planned
+**Plan:** `docs/plans/2026-03-10-sprints-15-19-roadmap.md`
+
+**Sprint 15 (P0):** DONE — Health check endpoints, per-route timeout configuration
+**Sprint 16 (P1):** Planned — Set-Cookie builder (RFC 6265bis), Vary header, host-based virtual routing
+**Sprint 17 (P1):** Planned — Streaming request body (chunked input), circuit breaker middleware
+**Sprint 18 (P1):** Planned — liboas adapter — OpenAPI spec generation, Scalar UI, request validation
+**Sprint 19 (P2):** Planned — W3C trace context propagation hooks, SIGHUP config hot reload
+
+**Dependency chain:** ~~13 → 15~~ (done) → 16 → 17 → 18 → 19. Sprint 14 is done (independent).

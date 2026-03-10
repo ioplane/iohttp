@@ -223,31 +223,63 @@ cmake --build --preset clang-debug --target format-check     # clang-format
 - Send queue: bounded per-connection depth, reject/backpressure on overflow
 - Overload: return 503 Service Unavailable when capacity exceeded
 
-## Missing Features Roadmap
+## Sprint History & Roadmap
 
-**P0 (blocks production use):**
-- Graceful shutdown with drain mode
-- Health check endpoint framework
-- Request ID middleware
-- Structured logging with custom fields and levels
-- Per-route timeout configuration
+### Completed Sprints
 
-**P1 (production hardening):**
-- HTTP caching (RFC 9111 compliance)
-- Content negotiation (Accept, Accept-Encoding)
-- Multipart/form-data parser
-- Cookie handling (RFC 6265bis: Set-Cookie, SameSite, Secure)
-- Circuit breaker pattern
-- PRIORITY_UPDATE (RFC 9218) for HTTP/2
-- Streaming request body (chunked input)
+| Sprint | Status | Features |
+|--------|--------|----------|
+| **S1-S8** | DONE | Core io_uring loop, HTTP/1.1, router, TLS, middleware, static files, WebSocket, SSE |
+| **S9** | DONE | Route metadata for introspection |
+| **S10** | DONE | HTTP/3 (QUIC via ngtcp2 + nghttp3), Alt-Svc |
+| **S11** | DONE | Integration pipeline: TCP accept→recv→TLS→parse→route→handler→send→close |
+| **S12** | DONE | Linked timeouts, request limits, signalfd shutdown, logging, request ID, PROXY protocol |
+| **S13** | DONE | HTTP/2 UAF fix, router stack-use-after-return fix, ASan green (46/46) |
+| **S14** | DONE | .clangd, .editorconfig, SECURITY.md, GitHub infra, SPDX headers, fuzz seeds |
+| **S15** | DONE | Health check endpoints (/health, /ready, /live), per-route timeouts |
 
-**P2 (completeness):**
-- HTTP/3 Datagrams (RFC 9297) — needed for WebTransport
-- WebTransport
-- Distributed tracing hooks (OpenTelemetry)
-- Host-based and header-based routing
-- Configuration hot reload
-- Dynamic connection pool scaling
+### Upcoming Sprints (0.1.0 Release Path)
+
+| Sprint | Priority | Features | Depends on |
+|--------|----------|----------|------------|
+| **S16** | P1 | Set-Cookie (RFC 6265bis), Vary header, host-based virtual routing | S15 |
+| **S17** | P1 | Streaming request body (chunked input), circuit breaker middleware | S16 |
+| **S18** | P1 | liboas adapter: OpenAPI spec, Scalar UI, request validation | S17 |
+| **S19** | P2 | W3C trace context hooks, SIGHUP config hot reload | S18 |
+
+**Plans:** `docs/plans/2026-03-10-sprints-15-19-roadmap.md`
+
+### P0 Features (ALL COMPLETE)
+
+- ~~Graceful shutdown with drain mode~~ (S11)
+- ~~Health check endpoint framework~~ (S15)
+- ~~Request ID middleware~~ (S12)
+- ~~Structured logging with custom fields and levels~~ (S12)
+- ~~Per-route timeout configuration~~ (S15)
+
+### Remaining P1 Features (Sprints 16-18)
+
+- Cookie handling (RFC 6265bis: Set-Cookie, SameSite, Secure) — S16
+- Content negotiation (Vary header) — S16
+- Host-based and header-based routing — S16
+- Streaming request body (chunked input) — S17
+- Circuit breaker pattern — S17
+- liboas OpenAPI integration — S18
+
+### Remaining P2 Features (Sprint 19+)
+
+- W3C trace context propagation — S19
+- Configuration hot reload (SIGHUP) — S19
+- HTTP/3 Datagrams (RFC 9297) — post-0.1.0
+- WebTransport — post-0.1.0
+- HTTP caching (RFC 9111 compliance) — post-0.1.0
+- Dynamic connection pool scaling — post-0.1.0
+
+### Competitive Positioning
+
+See `docs/en/04-framework-comparison.md` for detailed comparison with 12 frameworks (Gin, Fiber, Echo, Hertz, FastAPI, Actix-web, Axum, Kestrel, Spring Boot, Quarkus).
+
+**Key differentiators:** io_uring (exclusive), HTTP/1.1+2+3 in C (only Kestrel matches), wolfSSL+QUIC (exclusive), no GC/runtime, ~15K own LOC.
 
 ## Git Workflow
 
