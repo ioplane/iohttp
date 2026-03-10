@@ -48,7 +48,7 @@ cmake --build --preset clang-debug --target docs      # Doxygen
 ## Key Directories
 
 ```
-include/iohttp/     # Public API headers (io_server.h, io_request.h, io_router.h, ...)
+include/iohttp/     # Public API headers (ioh_server.h, ioh_request.h, ioh_router.h, ...)
 src/core/           # io_uring event loop, worker threads, server lifecycle, buffers
 src/net/            # Listener, multishot accept, socket options, PROXY protocol
 src/http/           # HTTP/1.1 (picohttpparser), HTTP/2 (nghttp2), HTTP/3 (ngtcp2+nghttp3)
@@ -72,8 +72,8 @@ deploy/podman/      # Container configurations
 
 **Full reference: `.claude/skills/iohttp-architecture/SKILL.md`** — MUST be followed for all code.
 
-- **Naming**: `io_module_verb_noun()` functions, `io_module_name_t` types, `IO_MODULE_VALUE` enums/macros
-- **Prefix**: `io_` for all public API
+- **Naming**: `ioh_module_verb_noun()` functions, `ioh_module_name_t` types, `IOH_MODULE_VALUE` enums/macros
+- **Prefix**: `ioh_` for all public API
 - **Typedef suffix**: `_t` for all types
 - **Include guards**: `IOHTTP_MODULE_FILE_H`
 - **Pointer style**: `int *ptr` (right-aligned, Linux kernel style)

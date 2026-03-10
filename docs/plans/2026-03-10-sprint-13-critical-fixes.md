@@ -21,13 +21,13 @@ cmake --preset clang-asan && cmake --build --preset clang-asan && ctest --preset
 ```
 
 **Existing files (read before implementing):**
-- `src/http/io_http2.c` — HTTP/2 session, `submit_response()`, `resp_data_read_cb` (Task 1)
-- `src/http/io_response.h` / `io_response.c` — response body ownership (Task 1)
-- `src/router/io_router.c` — `io_router_dispatch()`, `normalized[]` stack buffer (Task 2)
-- `src/router/io_radix.c` — `io_radix_lookup()`, param value pointers (Task 2)
-- `src/core/io_server.c` — request param copy from match (Task 2)
+- `src/http/ioh_http2.c` — HTTP/2 session, `submit_response()`, `resp_data_read_cb` (Task 1)
+- `src/http/ioh_response.h` / `ioh_response.c` — response body ownership (Task 1)
+- `src/router/ioh_router.c` — `ioh_router_dispatch()`, `normalized[]` stack buffer (Task 2)
+- `src/router/ioh_radix.c` — `ioh_radix_lookup()`, param value pointers (Task 2)
+- `src/core/ioh_server.c` — request param copy from match (Task 2)
 - `tests/integration/test_limits.c:95` — PVS V590 (Task 3)
-- `tests/unit/test_io_log.c:153` — PVS V618 (Task 3)
+- `tests/unit/test_ioh_log.c:153` — PVS V618 (Task 3)
 
 ---
 
@@ -36,24 +36,24 @@ cmake --preset clang-asan && cmake --build --preset clang-asan && ctest --preset
 **Severity:** CRITICAL — UB in runtime, potential crash/corruption under load.
 
 **Root cause:**
-1. `submit_response()` saves pointer to `resp->body` in `h2_stream_data.body` (`io_http2.c:253`)
-2. `io_response_destroy(&resp)` frees `resp->body` (`io_http2.c:475`, `io_response.c:72`)
-3. nghttp2 later calls `resp_data_read_cb` which reads freed `rd->body + rd->offset` (`io_http2.c:171`)
+1. `submit_response()` saves pointer to `resp->body` in `h2_stream_data.body` (`ioh_http2.c:253`)
+2. `ioh_response_destroy(&resp)` frees `resp->body` (`ioh_http2.c:475`, `ioh_response.c:72`)
+3. nghttp2 later calls `resp_data_read_cb` which reads freed `rd->body + rd->offset` (`ioh_http2.c:171`)
 
 **Fix strategy:** Transfer body ownership to `h2_stream_data` — either move the pointer (set `resp->body = NULL` before destroy) or copy the body into stream-owned memory.
 
 **Files:**
-- Modify: `src/http/io_http2.c` — `submit_response()` transfers body ownership to `rd`
-- Modify: `src/http/io_response.c` — ensure `destroy` handles `body == NULL` gracefully
-- Modify: `tests/unit/test_io_http2.c` — add regression test for body lifetime
+- Modify: `src/http/ioh_http2.c` — `submit_response()` transfers body ownership to `rd`
+- Modify: `src/http/ioh_response.c` — ensure `destroy` handles `body == NULL` gracefully
+- Modify: `tests/unit/test_ioh_http2.c` — add regression test for body lifetime
 
 **Step 1: Read the affected files**
 
-Read `src/http/io_http2.c` (focus on `submit_response`, `resp_data_read_cb`, `h2_stream_data` struct), `src/http/io_response.c` (focus on `io_response_destroy`), and `src/http/io_response.h`.
+Read `src/http/ioh_http2.c` (focus on `submit_response`, `resp_data_read_cb`, `h2_stream_data` struct), `src/http/ioh_response.c` (focus on `ioh_response_destroy`), and `src/http/ioh_response.h`.
 
 **Step 2: Write the failing test**
 
-In `tests/unit/test_io_http2.c`, add a test that creates a response with a heap-allocated body, submits it to the HTTP/2 data provider, destroys the response, then verifies the data callback can still read the body. Under ASan this should crash before the fix and pass after.
+In `tests/unit/test_ioh_http2.c`, add a test that creates a response with a heap-allocated body, submits it to the HTTP/2 data provider, destroys the response, then verifies the data callback can still read the body. Under ASan this should crash before the fix and pass after.
 
 ```c
 void test_http2_body_lifetime_after_response_destroy(void)
@@ -68,24 +68,24 @@ void test_http2_body_lifetime_after_response_destroy(void)
 
 ```bash
 cmake --preset clang-asan && cmake --build --preset clang-asan
-ctest --preset clang-asan -R test_io_http2 --output-on-failure
+ctest --preset clang-asan -R test_ioh_http2 --output-on-failure
 ```
 Expected: FAIL (heap-use-after-free)
 
 **Step 4: Fix — transfer body ownership in submit_response()**
 
-In `src/http/io_http2.c`, modify `submit_response()`:
+In `src/http/ioh_http2.c`, modify `submit_response()`:
 
 ```c
 /* Instead of: rd->body = resp->body; */
 /* Transfer ownership: */
 rd->body = resp->body;
 rd->body_len = resp->body_len;
-resp->body = nullptr;      /* prevent double-free in io_response_destroy */
+resp->body = nullptr;      /* prevent double-free in ioh_response_destroy */
 resp->body_len = 0;
 ```
 
-In `src/http/io_response.c`, ensure `io_response_destroy()` handles `body == NULL`:
+In `src/http/ioh_response.c`, ensure `ioh_response_destroy()` handles `body == NULL`:
 
 ```c
 /* Already safe if we check: */
@@ -100,14 +100,14 @@ Add cleanup in the HTTP/2 stream close path to free `rd->body` when the stream e
 **Step 5: Run ASan tests to verify fix**
 
 ```bash
-ctest --preset clang-asan -R "test_io_http2|test_http2_server" --output-on-failure
+ctest --preset clang-asan -R "test_ioh_http2|test_http2_server" --output-on-failure
 ```
 Expected: PASS (both tests)
 
 **Step 6: Commit**
 
 ```bash
-git add src/http/io_http2.c src/http/io_response.c tests/unit/test_io_http2.c
+git add src/http/ioh_http2.c src/http/ioh_response.c tests/unit/test_ioh_http2.c
 git commit -m "fix(http2): transfer response body ownership to stream data provider
 
 Fixes heap-use-after-free: nghttp2 data callback was reading freed
@@ -122,27 +122,27 @@ to h2_stream_data, preventing double-free and use-after-free."
 **Severity:** HIGH — incorrect param values, UB in middleware/handlers.
 
 **Root cause:**
-1. `io_router_dispatch()` normalizes path into `char normalized[IO_MAX_URI_SIZE]` on stack (`io_router.c:439`)
-2. `io_radix_lookup()` stores `param.value` as pointer into the passed path buffer (`io_radix.c:552,:582`)
-3. These pointers are copied into `io_route_match_t` and returned
-4. After `io_router_dispatch()` returns, `normalized` is invalid but pointers remain
+1. `ioh_router_dispatch()` normalizes path into `char normalized[IOH_MAX_URI_SIZE]` on stack (`ioh_router.c:439`)
+2. `ioh_radix_lookup()` stores `param.value` as pointer into the passed path buffer (`ioh_radix.c:552,:582`)
+3. These pointers are copied into `ioh_route_match_t` and returned
+4. After `ioh_router_dispatch()` returns, `normalized` is invalid but pointers remain
 
 **Fix strategy:** Copy param values into a stable buffer owned by the request/match. Either:
 - (A) Use request-owned arena/buffer for param strings, or
-- (B) Copy param values into `io_route_match_t` fixed-size buffers before returning
+- (B) Copy param values into `ioh_route_match_t` fixed-size buffers before returning
 
 **Files:**
-- Modify: `src/router/io_router.h` — add param value storage to `io_route_match_t`
-- Modify: `src/router/io_router.c` — copy param values before returning from dispatch
-- Modify: `tests/unit/test_io_router.c` — add regression test
+- Modify: `src/router/ioh_router.h` — add param value storage to `ioh_route_match_t`
+- Modify: `src/router/ioh_router.c` — copy param values before returning from dispatch
+- Modify: `tests/unit/test_ioh_router.c` — add regression test
 
 **Step 1: Read affected files**
 
-Read `src/router/io_router.c` (focus on `io_router_dispatch`, the `normalized` buffer, and how match params are populated), `src/router/io_radix.c` (how `param.value` is set), `src/router/io_router.h` (`io_route_match_t`).
+Read `src/router/ioh_router.c` (focus on `ioh_router_dispatch`, the `normalized` buffer, and how match params are populated), `src/router/ioh_radix.c` (how `param.value` is set), `src/router/ioh_router.h` (`ioh_route_match_t`).
 
 **Step 2: Write the failing test**
 
-In `tests/unit/test_io_router.c`, add a test that dispatches a route with params, then verifies param values after the dispatch function returns. Under ASan with `detect_stack_use_after_return=1`, this should fail before the fix.
+In `tests/unit/test_ioh_router.c`, add a test that dispatches a route with params, then verifies param values after the dispatch function returns. Under ASan with `detect_stack_use_after_return=1`, this should fail before the fix.
 
 ```c
 void test_router_param_lifetime_after_dispatch(void)
@@ -157,33 +157,33 @@ void test_router_param_lifetime_after_dispatch(void)
 **Step 3: Run test to verify it fails under ASan**
 
 ```bash
-ctest --preset clang-asan -R test_io_router --output-on-failure
+ctest --preset clang-asan -R test_ioh_router --output-on-failure
 ```
 Expected: FAIL (stack-use-after-return)
 
 **Step 4: Fix — copy param values into match-owned storage**
 
-Add a fixed buffer to `io_route_match_t` for param value storage:
+Add a fixed buffer to `ioh_route_match_t` for param value storage:
 
 ```c
-/* In io_router.h, add to io_route_match_t: */
-#define IO_MAX_PARAM_STORAGE 512  /* total storage for all param values */
+/* In ioh_router.h, add to ioh_route_match_t: */
+#define IOH_MAX_PARAM_STORAGE 512  /* total storage for all param values */
 
 typedef struct {
     /* ... existing fields ... */
-    char   param_storage[IO_MAX_PARAM_STORAGE]; /**< stable storage for param values */
+    char   param_storage[IOH_MAX_PARAM_STORAGE]; /**< stable storage for param values */
     size_t param_storage_used;
-} io_route_match_t;
+} ioh_route_match_t;
 ```
 
-In `io_router_dispatch()`, after `io_radix_lookup()`, copy each param value into `param_storage`:
+In `ioh_router_dispatch()`, after `ioh_radix_lookup()`, copy each param value into `param_storage`:
 
 ```c
 /* After radix lookup, before returning match: */
 size_t offset = 0;
 for (size_t i = 0; i < match->num_params; i++) {
     size_t vlen = match->params[i].value_len;
-    if (offset + vlen > IO_MAX_PARAM_STORAGE) {
+    if (offset + vlen > IOH_MAX_PARAM_STORAGE) {
         return -ENOMEM;
     }
     memcpy(match->param_storage + offset, match->params[i].value, vlen);
@@ -196,19 +196,19 @@ match->param_storage_used = offset;
 **Step 5: Run ASan tests**
 
 ```bash
-ctest --preset clang-asan -R test_io_router --output-on-failure
+ctest --preset clang-asan -R test_ioh_router --output-on-failure
 ```
 Expected: PASS
 
 **Step 6: Commit**
 
 ```bash
-git add src/router/io_router.h src/router/io_router.c tests/unit/test_io_router.c
+git add src/router/ioh_router.h src/router/ioh_router.c tests/unit/test_ioh_router.c
 git commit -m "fix(router): copy param values to match-owned storage
 
-Fixes stack-use-after-return: io_router_dispatch() stored param value
+Fixes stack-use-after-return: ioh_router_dispatch() stored param value
 pointers into a stack-local normalized[] buffer. After return, the
-pointers were dangling. Now copies param values into io_route_match_t
+pointers were dangling. Now copies param values into ioh_route_match_t
 param_storage buffer before returning."
 ```
 
@@ -220,13 +220,13 @@ param_storage buffer before returning."
 
 **Root cause:** Two PVS findings in test files:
 - `tests/integration/test_limits.c:95` — V590 (suspicious expression)
-- `tests/unit/test_io_log.c:153` — V618 (dangerous function call)
+- `tests/unit/test_ioh_log.c:153` — V618 (dangerous function call)
 
 **Fix strategy:** Examine each finding. If the test code is genuinely wrong, fix it. If it's a false positive or intentional test pattern, add inline `// -V590` / `// -V618` suppressions.
 
 **Files:**
 - Modify: `tests/integration/test_limits.c` — fix or suppress V590
-- Modify: `tests/unit/test_io_log.c` — fix or suppress V618
+- Modify: `tests/unit/test_ioh_log.c` — fix or suppress V618
 
 **Step 1: Read the flagged test files**
 
@@ -248,11 +248,11 @@ Expected: `PASS: 6, FAIL: 0`
 **Step 4: Commit**
 
 ```bash
-git add tests/integration/test_limits.c tests/unit/test_io_log.c
+git add tests/integration/test_limits.c tests/unit/test_ioh_log.c
 git commit -m "fix(tests): resolve PVS-Studio V590/V618 warnings in test files
 
 Normalize quality pipeline to green. V590 in test_limits.c was
-[description]. V618 in test_io_log.c was [description]."
+[description]. V618 in test_ioh_log.c was [description]."
 ```
 
 ---
@@ -289,5 +289,5 @@ Only if additional changes were required to get to green.
 - [ ] `ctest --preset clang-debug` — 46/46 PASS
 - [ ] `./scripts/quality.sh` — PASS: 6, FAIL: 0
 - [ ] HTTP/2 body data provider reads valid memory after response destroy
-- [ ] Router path params are valid after `io_router_dispatch()` returns
+- [ ] Router path params are valid after `ioh_router_dispatch()` returns
 - [ ] No regression in existing tests

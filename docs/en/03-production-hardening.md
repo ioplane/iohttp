@@ -39,16 +39,16 @@ deadline appropriate to its expected data rate:
 
 | Phase | Enum | Default | Purpose |
 |-------|------|---------|---------|
-| HEADER | `IO_TIMEOUT_HEADER` | 30 s | Time to receive complete HTTP headers |
-| BODY | `IO_TIMEOUT_BODY` | 60 s | Time to receive the full request body |
-| KEEPALIVE | `IO_TIMEOUT_KEEPALIVE` | 65 s | Idle time between pipelined requests |
+| HEADER | `IOH_TIMEOUT_HEADER` | 30 s | Time to receive complete HTTP headers |
+| BODY | `IOH_TIMEOUT_BODY` | 60 s | Time to receive the full request body |
+| KEEPALIVE | `IOH_TIMEOUT_KEEPALIVE` | 65 s | Idle time between pipelined requests |
 
 The timeout phase transitions automatically as the request progresses:
 
-1. New connection starts in `IO_TIMEOUT_HEADER`
-2. When headers are parsed but the body is incomplete, transitions to `IO_TIMEOUT_BODY`
-3. After a response is sent on a keep-alive connection, transitions to `IO_TIMEOUT_KEEPALIVE`
-4. When the next request arrives, resets to `IO_TIMEOUT_HEADER`
+1. New connection starts in `IOH_TIMEOUT_HEADER`
+2. When headers are parsed but the body is incomplete, transitions to `IOH_TIMEOUT_BODY`
+3. After a response is sent on a keep-alive connection, transitions to `IOH_TIMEOUT_KEEPALIVE`
+4. When the next request arrives, resets to `IOH_TIMEOUT_HEADER`
 
 ```mermaid
 stateDiagram-v2
@@ -82,23 +82,23 @@ When the timeout fires first:
 - Recv CQE with `res = -ECANCELED` (recv was canceled)
 
 > [!IMPORTANT]
-> The `timeout_ts` field lives in `io_conn_t` (not on the stack) because the
+> The `timeout_ts` field lives in `ioh_conn_t` (not on the stack) because the
 > kernel reads it asynchronously. The timespec must outlive the SQE submission.
 
 ### Configuration
 
 | Parameter | Field | Default | Unit |
 |-----------|-------|---------|------|
-| Header timeout | `io_server_config_t.header_timeout_ms` | 30000 | ms |
-| Body timeout | `io_server_config_t.body_timeout_ms` | 60000 | ms |
-| Keepalive timeout | `io_server_config_t.keepalive_timeout_ms` | 65000 | ms |
+| Header timeout | `ioh_server_config_t.header_timeout_ms` | 30000 | ms |
+| Body timeout | `ioh_server_config_t.body_timeout_ms` | 60000 | ms |
+| Keepalive timeout | `ioh_server_config_t.keepalive_timeout_ms` | 65000 | ms |
 
 <details>
 <summary>Example: configuring aggressive timeouts for an API gateway</summary>
 
 ```c
-io_server_config_t cfg;
-io_server_config_init(&cfg);
+ioh_server_config_t cfg;
+ioh_server_config_init(&cfg);
 cfg.listen_port = 8080;
 cfg.header_timeout_ms  = 5000;   /* 5s for headers */
 cfg.body_timeout_ms    = 15000;  /* 15s for body */
@@ -148,8 +148,8 @@ flowchart TD
 
 | Parameter | Field | Default | Unit |
 |-----------|-------|---------|------|
-| Max header size | `io_server_config_t.max_header_size` | 8192 | bytes |
-| Max body size | `io_server_config_t.max_body_size` | 1048576 | bytes |
+| Max header size | `ioh_server_config_t.max_header_size` | 8192 | bytes |
+| Max body size | `ioh_server_config_t.max_body_size` | 1048576 | bytes |
 
 > [!NOTE]
 > The `max_header_size` limit covers the entire HTTP request line plus all headers.
@@ -161,8 +161,8 @@ flowchart TD
 <summary>Example: large file upload endpoint</summary>
 
 ```c
-io_server_config_t cfg;
-io_server_config_init(&cfg);
+ioh_server_config_t cfg;
+ioh_server_config_init(&cfg);
 cfg.listen_port = 8080;
 cfg.max_header_size = 16384;       /* 16 KiB headers */
 cfg.max_body_size   = 104857600;   /* 100 MiB uploads */
@@ -182,20 +182,20 @@ conditions. Signals are delivered as regular CQEs alongside network I/O.
 
 | Signal | Action | Shutdown Mode |
 |--------|--------|---------------|
-| `SIGTERM` | Graceful drain | `IO_SHUTDOWN_DRAIN` |
-| `SIGQUIT` | Immediate close | `IO_SHUTDOWN_IMMEDIATE` |
+| `SIGTERM` | Graceful drain | `IOH_SHUTDOWN_DRAIN` |
+| `SIGQUIT` | Immediate close | `IOH_SHUTDOWN_IMMEDIATE` |
 
 ### How It Works
 
 ```mermaid
 flowchart TD
-    A[io_server_run starts] --> B[block SIGTERM + SIGQUIT with sigprocmask]
+    A[ioh_server_run starts] --> B[block SIGTERM + SIGQUIT with sigprocmask]
     B --> C[create signalfd with SFD_NONBLOCK + SFD_CLOEXEC]
     C --> D[arm io_uring read on signalfd]
     D --> E[event loop running]
     E --> F{signal CQE arrives?}
-    F -- SIGTERM --> G[io_server_shutdown DRAIN]
-    F -- SIGQUIT --> H[io_server_shutdown IMMEDIATE]
+    F -- SIGTERM --> G[ioh_server_shutdown DRAIN]
+    F -- SIGQUIT --> H[ioh_server_shutdown IMMEDIATE]
     G --> I[cancel multishot accept]
     I --> J[close listen socket]
     J --> K[transition active conns to DRAINING]
@@ -211,7 +211,7 @@ flowchart TD
 ### Graceful Drain Sequence (SIGTERM)
 
 1. Stop accepting new connections (cancel multishot accept, close listen fd)
-2. Transition all `IO_CONN_HTTP_ACTIVE` connections to `IO_CONN_DRAINING`
+2. Transition all `IOH_CONN_HTTP_ACTIVE` connections to `IOH_CONN_DRAINING`
 3. Set `keep_alive = false` on all connections -- in-flight requests complete but
    connections close after the current response
 4. Run a drain loop polling every 50 ms until either all connections close or the
@@ -230,9 +230,9 @@ The drain timeout uses `keepalive_timeout_ms` from the server configuration
 keep-alive connections to complete their current request-response cycle.
 
 > [!CAUTION]
-> The `signalfd` is created inside `io_server_run()`. If you use `io_server_run_once()`
+> The `signalfd` is created inside `ioh_server_run()`. If you use `ioh_server_run_once()`
 > in your own event loop, you must handle signals yourself. The signalfd setup only
-> applies to the blocking `io_server_run()` entry point.
+> applies to the blocking `ioh_server_run()` entry point.
 
 <details>
 <summary>Example: container orchestrator integration</summary>
@@ -241,17 +241,17 @@ Kubernetes sends `SIGTERM` before pod termination. With the default drain timeou
 the server has 65 seconds to finish in-flight requests before force-closing:
 
 ```c
-io_server_config_t cfg;
-io_server_config_init(&cfg);
+ioh_server_config_t cfg;
+ioh_server_config_init(&cfg);
 cfg.listen_port = 8080;
 cfg.keepalive_timeout_ms = 30000; /* 30s drain matches k8s default */
 
-io_server_t *srv = io_server_create(&cfg);
+ioh_server_t *srv = ioh_server_create(&cfg);
 /* ... configure router, TLS ... */
 
-/* Blocks until SIGTERM/SIGQUIT or io_server_stop() */
-int rc = io_server_run(srv);
-io_server_destroy(srv);
+/* Blocks until SIGTERM/SIGQUIT or ioh_server_stop() */
+int rc = ioh_server_run(srv);
+ioh_server_destroy(srv);
 ```
 
 </details>
@@ -262,7 +262,7 @@ io_server_destroy(srv);
 
 ### What It Does
 
-The `io_log` module provides level-filtered, module-tagged logging with pluggable
+The `ioh_log` module provides level-filtered, module-tagged logging with pluggable
 sink callbacks. All internal server messages (accept, timeout, shutdown, errors) use
 this module. Application code can use the same API for consistent output.
 
@@ -270,10 +270,10 @@ this module. Application code can use the same API for consistent output.
 
 | Level | Enum | Numeric | Use Case |
 |-------|------|---------|----------|
-| ERROR | `IO_LOG_ERROR` | 0 | Unrecoverable failures, resource exhaustion |
-| WARN | `IO_LOG_WARN` | 1 | Rejected requests, pool full, malformed input |
-| INFO | `IO_LOG_INFO` | 2 | Server start/stop, listen address, shutdown |
-| DEBUG | `IO_LOG_DEBUG` | 3 | Per-connection events, PROXY decode, timeouts |
+| ERROR | `IOH_LOG_ERROR` | 0 | Unrecoverable failures, resource exhaustion |
+| WARN | `IOH_LOG_WARN` | 1 | Rejected requests, pool full, malformed input |
+| INFO | `IOH_LOG_INFO` | 2 | Server start/stop, listen address, shutdown |
+| DEBUG | `IOH_LOG_DEBUG` | 3 | Per-connection events, PROXY decode, timeouts |
 
 Messages below the configured minimum level are filtered before formatting
 (no `snprintf` cost for suppressed messages).
@@ -281,20 +281,20 @@ Messages below the configured minimum level are filtered before formatting
 ### API
 
 ```c
-/* Set minimum level (default: IO_LOG_INFO) */
-io_log_set_level(IO_LOG_DEBUG);
+/* Set minimum level (default: IOH_LOG_INFO) */
+ioh_log_set_level(IOH_LOG_DEBUG);
 
 /* Query current level */
-io_log_level_t level = io_log_get_level();
+ioh_log_level_t level = ioh_log_get_level();
 
 /* Direct API */
-io_log(IO_LOG_INFO, "mymodule", "request %s %s", method, path);
+ioh_log(IOH_LOG_INFO, "mymodule", "request %s %s", method, path);
 
 /* Convenience macros */
-IO_LOG_ERROR("tls", "handshake failed: %s", io_tls_error_str(rc));
-IO_LOG_WARN("server", "pool full, rejecting fd=%d", client_fd);
-IO_LOG_INFO("server", "listening on %s:%u", addr, port);
-IO_LOG_DEBUG("server", "conn %u: timeout, closing", conn_id);
+IOH_LOG_ERROR("tls", "handshake failed: %s", ioh_tls_error_str(rc));
+IOH_LOG_WARN("server", "pool full, rejecting fd=%d", client_fd);
+IOH_LOG_INFO("server", "listening on %s:%u", addr, port);
+IOH_LOG_DEBUG("server", "conn %u: timeout, closing", conn_id);
 ```
 
 ### Custom Sinks
@@ -303,7 +303,7 @@ The default sink writes to stderr. Replace it with a custom callback for JSON
 logging, syslog, file output, or integration with an observability pipeline:
 
 ```c
-void json_sink(io_log_level_t level,
+void json_sink(ioh_log_level_t level,
                const char *module,
                const char *message,
                void *user_data)
@@ -312,14 +312,14 @@ void json_sink(io_log_level_t level,
     fprintf(f,
         "{\"level\":\"%s\",\"module\":\"%s\","
         "\"msg\":\"%s\"}\n",
-        io_log_level_name(level), module, message);
+        ioh_log_level_name(level), module, message);
 }
 
 /* Install custom sink */
-io_log_set_sink(json_sink, stderr);
+ioh_log_set_sink(json_sink, stderr);
 
 /* Revert to default stderr output */
-io_log_set_sink(nullptr, nullptr);
+ioh_log_set_sink(nullptr, nullptr);
 ```
 
 > [!NOTE]
@@ -344,7 +344,7 @@ flowchart TD
     A[incoming request] --> B{X-Request-Id header present?}
     B -- yes --> C[propagate incoming ID]
     B -- no --> D[generate 128-bit hex via arc4random]
-    C --> E[store in io_ctx as request_id]
+    C --> E[store in ioh_ctx as request_id]
     D --> E
     E --> F[set X-Request-Id response header]
     F --> G[dispatch to router and handlers]
@@ -359,7 +359,7 @@ Generated IDs are 32 hex characters (128 bits) produced by four calls to
 X-Request-Id: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
 ```
 
-The ID is allocated from the per-request arena (`io_ctx_sprintf`), so it is
+The ID is allocated from the per-request arena (`ioh_ctx_sprintf`), so it is
 automatically freed when the request context is destroyed.
 
 ### Accessing the Request ID
@@ -367,12 +367,12 @@ automatically freed when the request context is destroyed.
 Inside a handler or middleware, retrieve the ID from the context key-value store:
 
 ```c
-int my_handler(io_ctx_t *c)
+int my_handler(ioh_ctx_t *c)
 {
-    const char *rid = io_ctx_get(c, "request_id");
-    IO_LOG_INFO("handler", "[%s] processing request", rid);
+    const char *rid = ioh_ctx_get(c, "request_id");
+    IOH_LOG_INFO("handler", "[%s] processing request", rid);
 
-    return io_ctx_json(c, 200, "{\"status\":\"ok\"}");
+    return ioh_ctx_json(c, 200, "{\"status\":\"ok\"}");
 }
 ```
 
@@ -402,7 +402,7 @@ flowchart TD
     B -- yes --> C[state: PROXY_HEADER]
     B -- no --> D{TLS configured?}
     C --> E[recv with HEADER timeout]
-    E --> F[io_proxy_decode]
+    E --> F[ioh_proxy_decode]
     F --> G{result?}
     G -- bytes consumed --> H[store src_addr in conn]
     G -- EAGAIN --> E
@@ -437,10 +437,10 @@ typedef struct {
     uint8_t family;                    /* AF_INET or AF_INET6 */
     struct sockaddr_storage src_addr;  /* real client address */
     struct sockaddr_storage dst_addr;  /* original destination */
-} io_proxy_result_t;
+} ioh_proxy_result_t;
 ```
 
-The `src_addr` is stored in `io_conn_t.proxy_addr` and `proxy_used` is set to
+The `src_addr` is stored in `ioh_conn_t.proxy_addr` and `proxy_used` is set to
 `true`. Subsequent middleware and handlers can check `proxy_used` to determine
 whether to use `proxy_addr` or `peer_addr` for the client IP.
 
@@ -448,7 +448,7 @@ whether to use `proxy_addr` or `peer_addr` for the client IP.
 
 | Parameter | Field | Default |
 |-----------|-------|---------|
-| Enable PROXY protocol | `io_server_config_t.proxy_protocol` | `false` |
+| Enable PROXY protocol | `ioh_server_config_t.proxy_protocol` | `false` |
 
 > [!CAUTION]
 > PROXY protocol is **explicit mode only**. When enabled, the server expects a PROXY
@@ -470,12 +470,12 @@ backend iohttp_servers
 iohttp configuration:
 
 ```c
-io_server_config_t cfg;
-io_server_config_init(&cfg);
+ioh_server_config_t cfg;
+ioh_server_config_init(&cfg);
 cfg.listen_port = 8080;
 cfg.proxy_protocol = true;
 
-io_server_t *srv = io_server_create(&cfg);
+ioh_server_t *srv = ioh_server_create(&cfg);
 ```
 
 </details>
@@ -490,12 +490,12 @@ All Sprint 12 features have Unity-based unit tests in `tests/unit/`:
 
 | Feature | Test File | Key Test Cases |
 |---------|-----------|----------------|
-| Linked timeouts | `test_io_server.c` | Timeout phase transitions, CQE handling for `-ECANCELED` vs `-ETIME` |
-| Request limits | `test_io_server.c` | 431 on oversized headers, 413 on oversized body |
-| Signal handling | `test_io_server.c` | SIGTERM drain, SIGQUIT immediate, signalfd lifecycle |
-| Structured logging | `test_io_log.c` | Level filtering, custom sink, level name strings |
-| Request ID | `test_io_server.c` | Generation format, incoming propagation, arena allocation |
-| PROXY protocol | `test_io_proxy_proto.c` | v1 decode, v2 decode, incomplete data, malformed input |
+| Linked timeouts | `test_ioh_server.c` | Timeout phase transitions, CQE handling for `-ECANCELED` vs `-ETIME` |
+| Request limits | `test_ioh_server.c` | 431 on oversized headers, 413 on oversized body |
+| Signal handling | `test_ioh_server.c` | SIGTERM drain, SIGQUIT immediate, signalfd lifecycle |
+| Structured logging | `test_ioh_log.c` | Level filtering, custom sink, level name strings |
+| Request ID | `test_ioh_server.c` | Generation format, incoming propagation, arena allocation |
+| PROXY protocol | `test_ioh_proxy_proto.c` | v1 decode, v2 decode, incomplete data, malformed input |
 
 ### Integration Tests
 
@@ -535,25 +535,25 @@ nc -v localhost 8080
 ### Upgrading from Sprint 11
 
 Sprint 12 is backward-compatible. All new configuration fields have sensible
-defaults set by `io_server_config_init()`. Existing code that calls
-`io_server_config_init()` before configuring fields will pick up the new defaults
+defaults set by `ioh_server_config_init()`. Existing code that calls
+`ioh_server_config_init()` before configuring fields will pick up the new defaults
 automatically.
 
 **No breaking changes.** The following are new additions only:
 
 | Change | Impact |
 |--------|--------|
-| `io_server_config_t` gains `header_timeout_ms`, `body_timeout_ms`, `keepalive_timeout_ms` | Defaults applied by `io_server_config_init()` |
-| `io_server_config_t` gains `max_header_size`, `max_body_size` | Defaults: 8 KiB / 1 MiB |
-| `io_server_config_t` gains `proxy_protocol` | Default: `false` (disabled) |
-| `io_conn_t` gains `timeout_phase`, `timeout_ts`, `proxy_addr`, `proxy_used` | Internal fields, not part of public API |
-| `io_log_*` API added | Optional -- server uses it internally, applications can adopt it |
+| `ioh_server_config_t` gains `header_timeout_ms`, `body_timeout_ms`, `keepalive_timeout_ms` | Defaults applied by `ioh_server_config_init()` |
+| `ioh_server_config_t` gains `max_header_size`, `max_body_size` | Defaults: 8 KiB / 1 MiB |
+| `ioh_server_config_t` gains `proxy_protocol` | Default: `false` (disabled) |
+| `ioh_conn_t` gains `timeout_phase`, `timeout_ts`, `proxy_addr`, `proxy_used` | Internal fields, not part of public API |
+| `ioh_log_*` API added | Optional -- server uses it internally, applications can adopt it |
 | `X-Request-Id` header added to all responses | Clients may observe a new header |
 
 > [!NOTE]
 > If your application already sets `X-Request-Id` in a middleware or handler, the
 > server-generated ID will be overwritten by your value during response serialization
-> (last `io_response_set_header` call wins). To preserve the server-generated ID,
+> (last `ioh_response_set_header` call wins). To preserve the server-generated ID,
 > check for its existence before setting your own.
 
 ### Connection State Machine (Full)
@@ -587,7 +587,7 @@ stateDiagram-v2
 flowchart TD
     A[multishot accept CQE] --> B{proxy_protocol?}
     B -- yes --> C[recv PROXY header with HEADER timeout]
-    C --> D[io_proxy_decode]
+    C --> D[ioh_proxy_decode]
     D --> E{TLS?}
     B -- no --> E
     E -- yes --> F[wolfSSL handshake]
@@ -595,7 +595,7 @@ flowchart TD
     E -- no --> G
     G --> H{recv_len > max_header_size?}
     H -- yes --> I[431 + close]
-    H -- no --> J[io_http1_parse_request]
+    H -- no --> J[ioh_http1_parse_request]
     J --> K{Content-Length > max_body_size?}
     K -- yes --> L[413 + close]
     K -- no --> M{body complete?}

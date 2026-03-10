@@ -21,7 +21,7 @@
 По вашим проектным .md:
 
 - `iohttp` описан как библиотека на C23 с core‑runtime на **io_uring**, нативным **wolfSSL**, поддержкой **PROXY protocol v1/v2**, HTTP/1.1–3, router+middleware и раздачей статики/SPA (см. `/mnt/data/01-architecture.md`, `/mnt/data/02-comparison.md`).
-- `liboas` задуман как надстройка над `iohttp`: **не владеет сокетами/TLS/io_uring**, делает OpenAPI parsing/compilation/validation и интегрируется через `liboas-adapter-iohttp` (см. `/mnt/data/liboas_technical_spec_c23_iohttp.md`).
+- `liboas` задуман как надстройка над `iohttp`: **не владеет сокетами/TLS/ioh_uring**, делает OpenAPI parsing/compilation/validation и интегрируется через `liboas-adapter-iohttp` (см. `/mnt/data/liboas_technical_spec_c23_iohttp.md`).
 
 Два места, где в текущих .md видны потенциальные несостыковки (нужно чинить):
 
@@ -286,7 +286,7 @@ typedef struct {
 
 Улучшения:
 
-- **MUST**: закрепить правило «единственный route lookup в iohttp» и binding `io_route_t ↔ oas_operation_t` при старте (у вас это уже прописано; нужно довести до конкретного API и тестов). citeturn5view0turn4view0
+- **MUST**: закрепить правило «единственный route lookup в iohttp» и binding `ioh_route_t ↔ oas_operation_t` при старте (у вас это уже прописано; нужно довести до конкретного API и тестов). citeturn5view0turn4view0
 - **SHOULD**: в adapter добавить режим «validate‑before‑handler» (request) и «validate‑after‑handler» (response) с отдельными политиками.
 - **MAY**: добавить fast‑path «skip validation» для health‑check endpoints и статики/SPA.
 
@@ -377,7 +377,7 @@ typedef struct {
   - `OAS_ENABLE_REGEX` (ON/OFF),
   - `OAS_ENABLE_FULL_OUTPUT` (OFF).
     Основание: `$vocabulary` требует понимать обязательные vocabularies; если вы не реализуете — должны reject или отключать. citeturn6view5turn6view6turn7view1turn24view0
-- **SHOULD**: флаги `iohttp` для io_uring режимов: `IO_USE_SQPOLL`, `IO_USE_SEND_ZC`, `IO_USE_RECV_MULTISHOT`, `IO_USE_BUF_RING`, с runtime probing поведения (если kernel не поддерживает — graceful degrade в рамках Linux‑only, но без epoll fallback). citeturn22view0turn12view1turn12view2
+- **SHOULD**: флаги `iohttp` для io_uring режимов: `IOH_USE_SQPOLL`, `IOH_USE_SEND_ZC`, `IOH_USE_RECV_MULTISHOT`, `IOH_USE_BUF_RING`, с runtime probing поведения (если kernel не поддерживает — graceful degrade в рамках Linux‑only, но без epoll fallback). citeturn22view0turn12view1turn12view2
 
 ### Portability (POSIX/RTOS)
 
@@ -467,7 +467,7 @@ typedef struct {
 - `/mnt/data/02-comparison.md`
   - Раздел PROXY protocol (строки ~27 и далее): добавить security‑оговорку «не auto-detect, allowlist», т.к. сейчас это выглядит как просто фича, без угроз‑модели. citeturn17view0
 
-- Прочие места: **unspecified** (если есть дополнительные внутренние .md/код‑скелеты, не доступные в этом контексте, которые описывают конкретные API `io_request_t/io_response_t`, их нужно синхронизировать с DTO выше).
+- Прочие места: **unspecified** (если есть дополнительные внутренние .md/код‑скелеты, не доступные в этом контексте, которые описывают конкретные API `ioh_request_t/ioh_response_t`, их нужно синхронизировать с DTO выше).
 
 ## Приложение: request flow (end‑to‑end)
 
@@ -480,7 +480,7 @@ flowchart LR
   D -->|yes| E[wolfSSL handshake\n(mTLS verify policy)]
   D -->|no| F[HTTP parse]
   E --> F[HTTP parse\n(h1/h2/h3 framing)]
-  F --> G[Router match -> io_route_t]
+  F --> G[Router match -> ioh_route_t]
   G --> H[liboas middleware (adapter)\nmap iohttp -> oas_runtime_request_t]
   H --> I[liboas validate request\n(params + body + security)]
   I -->|ok| J[Handler]

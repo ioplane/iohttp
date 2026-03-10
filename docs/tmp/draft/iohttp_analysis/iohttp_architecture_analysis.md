@@ -103,11 +103,11 @@ Linux Kernel
 **Рекомендация:**
 ```c
 // Добавить в конфигурацию
-struct io_backpressure_config {
+struct ioh_backpressure_config {
     size_t max_pending_requests;      // Макс. запросов в очереди
     size_t max_request_queue_bytes;   // Макс. байт в очереди
     uint32_t overload_threshold_ms;   // Порог для срабатывания
-    void (*on_overload)(io_server_t*); // Callback при перегрузке
+    void (*on_overload)(ioh_server_t*); // Callback при перегрузке
 };
 ```
 
@@ -148,7 +148,7 @@ typedef struct {
     size_t growth_factor;        // На сколько расширяться
     float scale_up_threshold;    // При какой загрузке расширяться
     float scale_down_threshold;  // При какой загрузке сжиматься
-} io_pool_scaling_config_t;
+} ioh_pool_scaling_config_t;
 ```
 
 #### 2.2 Single Point of Contention в CQE Dispatch
@@ -168,7 +168,7 @@ typedef union {
         uint8_t  reserved;      // Padding/flags
     } fields;
     uint64_t raw;
-} io_cqe_user_data_t;
+} ioh_cqe_user_data_t;
 ```
 
 #### 2.3 Buffer Management при высокой нагрузке
@@ -187,7 +187,7 @@ typedef struct {
     size_t low_watermark;         // Порог для аллокации доп. буферов
     size_t high_watermark;        // Порог для освобождения
     bool enable_dynamic_growth;   // Динамическое расширение
-} io_buffer_ring_config_t;
+} ioh_buffer_ring_config_t;
 ```
 
 ### 🟡 Средний риск
@@ -255,8 +255,8 @@ typedef struct {
     atomic_size_t requests_by_status[6]; // 1xx, 2xx, 3xx, 4xx, 5xx, error
     
     // Latency histograms
-    io_histogram_t request_latency_us;
-    io_histogram_t tls_handshake_ms;
+    ioh_histogram_t request_latency_us;
+    ioh_histogram_t tls_handshake_ms;
     
     // I/O metrics
     atomic_size_t bytes_read;
@@ -264,26 +264,26 @@ typedef struct {
     atomic_size_t zero_copy_transfers;
     
     // Error metrics
-    atomic_size_t io_errors;
+    atomic_size_t ioh_errors;
     atomic_size_t protocol_errors;
     atomic_size_t timeout_errors;
-} io_server_metrics_t;
+} ioh_server_metrics_t;
 ```
 
 ### 3.2 Graceful Shutdown
 
 ```c
 typedef enum {
-    IO_SHUTDOWN_GRACEFUL,    // Дождаться завершения запросов
-    IO_SHUTDOWN_IMMEDIATE,   // Закрыть все соединения
-    IO_SHUTDOWN_DRAIN        // Не принимать новые, дождаться текущих
-} io_shutdown_mode_t;
+    IOH_SHUTDOWN_GRACEFUL,    // Дождаться завершения запросов
+    IOH_SHUTDOWN_IMMEDIATE,   // Закрыть все соединения
+    IOH_SHUTDOWN_DRAIN        // Не принимать новые, дождаться текущих
+} ioh_shutdown_mode_t;
 
 typedef struct {
-    io_shutdown_mode_t mode;
+    ioh_shutdown_mode_t mode;
     uint32_t graceful_timeout_ms;
     void (*on_shutdown_complete)(void* user_data);
-} io_shutdown_config_t;
+} ioh_shutdown_config_t;
 ```
 
 ### 3.3 Health Check Endpoint
@@ -292,9 +292,9 @@ typedef struct {
 // Встроенный health check
 typedef struct {
     const char* path;                    // "/health"
-    io_health_status_t (*check)(void*);  // Custom check function
+    ioh_health_status_t (*check)(void*);  // Custom check function
     bool include_metrics;                // Добавить метрики в ответ
-} io_health_config_t;
+} ioh_health_config_t;
 
 // Ответ: {"status":"healthy","checks":{"memory":true,"disk":true},"uptime":3600}
 ```
@@ -303,26 +303,26 @@ typedef struct {
 
 ```c
 // Контекст запроса для tracing и metadata
-typedef struct io_request_context {
+typedef struct ioh_request_context {
     uuid_t request_id;              // Уникальный ID запроса
     uuid_t trace_id;                // Distributed trace ID
     uuid_t parent_span_id;          // Parent span для tracing
     struct timespec start_time;     // Начало обработки
     
     // Baggage для propagation
-    io_baggage_t* baggage;
+    ioh_baggage_t* baggage;
     
     // Custom user data
     void* user_data;
     void (*user_data_destructor)(void*);
-} io_request_context_t;
+} ioh_request_context_t;
 
 // Middleware получает контекст
-typedef int (*io_middleware_fn_t)(
-    io_request_t* req, 
-    io_response_t* resp,
-    io_request_context_t* ctx,
-    io_next_fn_t next
+typedef int (*ioh_middleware_fn_t)(
+    ioh_request_t* req, 
+    ioh_response_t* resp,
+    ioh_request_context_t* ctx,
+    ioh_next_fn_t next
 );
 ```
 
@@ -335,19 +335,19 @@ typedef struct {
     uint32_t version;
     
     // Lifecycle hooks
-    int (*init)(io_server_t* server, void* config);
-    void (*shutdown)(io_server_t* server);
+    int (*init)(ioh_server_t* server, void* config);
+    void (*shutdown)(ioh_server_t* server);
     
     // Request hooks
-    int (*pre_request)(io_request_t* req, io_request_context_t* ctx);
-    int (*post_request)(io_request_t* req, io_response_t* resp, io_request_context_t* ctx);
+    int (*pre_request)(ioh_request_t* req, ioh_request_context_t* ctx);
+    int (*post_request)(ioh_request_t* req, ioh_response_t* resp, ioh_request_context_t* ctx);
     
     // Connection hooks
-    void (*on_connect)(io_connection_t* conn);
-    void (*on_disconnect)(io_connection_t* conn, io_disconnect_reason_t reason);
-} io_plugin_t;
+    void (*on_connect)(ioh_connection_t* conn);
+    void (*on_disconnect)(ioh_connection_t* conn, ioh_disconnect_reason_t reason);
+} ioh_plugin_t;
 
-int io_server_register_plugin(io_server_t* server, const io_plugin_t* plugin);
+int ioh_server_register_plugin(ioh_server_t* server, const ioh_plugin_t* plugin);
 ```
 
 ### 3.6 Improved Rate Limiting
@@ -360,15 +360,15 @@ typedef struct {
     size_t bucket_capacity;
     
     // Distributed backend (optional)
-    io_rate_limit_backend_t* backend;
+    ioh_rate_limit_backend_t* backend;
     
     // Key extraction
-    io_rate_limit_key_fn_t key_fn;  // IP, user, API key, etc.
+    ioh_rate_limit_key_fn_t key_fn;  // IP, user, API key, etc.
     
     // Response
     uint16_t status_code;           // 429 by default
     const char* retry_after_header; // Добавить Retry-After
-} io_rate_limit_config_t;
+} ioh_rate_limit_config_t;
 ```
 
 ### 3.7 Configuration Hot Reload
@@ -384,9 +384,9 @@ typedef struct {
     void (*on_reload_start)(void);
     void (*on_reload_success)(void);
     void (*on_reload_error)(const char* error);
-} io_config_reload_t;
+} ioh_config_reload_t;
 
-int io_server_reload_config(io_server_t* server);
+int ioh_server_reload_config(ioh_server_t* server);
 ```
 
 ---
@@ -424,7 +424,7 @@ src/
 
 #### ✅ Dependency Injection через config
 ```c
-io_server_config_t config = {
+ioh_server_config_t config = {
     .tls_config = &tls_cfg,      // Inject TLS
     .router = &my_router,        // Inject router
     .middleware_chain = chain,   // Inject middleware
@@ -455,14 +455,14 @@ src/
 **Рекомендация:** Поддержка условного выполнения:
 ```c
 typedef struct {
-    io_middleware_fn_t fn;
-    io_middleware_condition_fn_t condition;  // Условие выполнения
+    ioh_middleware_fn_t fn;
+    ioh_middleware_condition_fn_t condition;  // Условие выполнения
     uint32_t priority;                        // Порядок выполнения
     const char* name;                         // Для debugging
-} io_middleware_entry_t;
+} ioh_middleware_entry_t;
 
 // Пример: CORS только для OPTIONS и cross-origin
-bool cors_condition(io_request_t* req) {
+bool cors_condition(ioh_request_t* req) {
     return strcmp(req->method, "OPTIONS") == 0 || 
            is_cross_origin(req);
 }

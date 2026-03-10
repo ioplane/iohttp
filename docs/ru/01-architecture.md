@@ -16,9 +16,9 @@ iohttp -- это встраиваемая HTTP-серверная библиот
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      User Application                       │
-│   io_server_create() → io_route_add() → io_server_run()    │
+│   ioh_server_create() → ioh_route_add() → ioh_server_run()    │
 ├─────────────────────────────────────────────────────────────┤
-│                     Public C API (io_*)                      │
+│                     Public C API (ioh_*)                      │
 ├──────────┬──────────┬──────────┬───────────┬────────────────┤
 │  Router  │Middleware│  Static  │ WebSocket │      SSE       │
 │  (trie)  │  chain   │  files   │ RFC 6455  │  text/stream   │
@@ -52,11 +52,11 @@ iohttp -- это встраиваемая HTTP-серверная библиот
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_loop.{h,c}` | ~500 | Настройка кольца io_uring, отправка SQE, сбор CQE, колесо таймеров |
-| `io_server.{h,c}` | ~1055 | Жизненный цикл сервера, linked timeouts, signalfd shutdown, лимиты запросов, request ID |
-| `io_buffer.{h,c}` | ~250 | Управление предоставляемыми буферными кольцами, пул буферов |
-| `io_conn.{h,c}` | ~385 | Конечный автомат соединений, фазы таймаутов, состояние PROXY |
-| `io_log.{h,c}` | ~165 | Структурированное логирование с уровнями, пользовательские sink-колбэки |
+| `ioh_loop.{h,c}` | ~500 | Настройка кольца io_uring, отправка SQE, сбор CQE, колесо таймеров |
+| `ioh_server.{h,c}` | ~1055 | Жизненный цикл сервера, linked timeouts, signalfd shutdown, лимиты запросов, request ID |
+| `ioh_buffer.{h,c}` | ~250 | Управление предоставляемыми буферными кольцами, пул буферов |
+| `ioh_conn.{h,c}` | ~385 | Конечный автомат соединений, фазы таймаутов, состояние PROXY |
+| `ioh_log.{h,c}` | ~165 | Структурированное логирование с уровнями, пользовательские sink-колбэки |
 
 **Используемые возможности io_uring:**
 - `IORING_OP_ACCEPT` с `IORING_ACCEPT_MULTISHOT` -- один SQE принимает все соединения
@@ -125,8 +125,8 @@ ACCEPTING → PROXY_HEADER → TLS_HANDSHAKE → PROTOCOL_NEGOTIATION
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_tls.{h,c}` | ~460 | Контекст wolfSSL, пользовательские callback ввода-вывода для io_uring |
-| `io_tls_quic.{h,c}` | планируется | QUIC-криптография через ngtcp2_crypto_wolfssl |
+| `ioh_tls.{h,c}` | ~460 | Контекст wolfSSL, пользовательские callback ввода-вывода для io_uring |
+| `ioh_tls_quic.{h,c}` | планируется | QUIC-криптография через ngtcp2_crypto_wolfssl |
 
 **Паттерн callback ввода-вывода для io_uring:**
 ```c
@@ -174,13 +174,13 @@ ACCEPTING → PROXY_HEADER → TLS_HANDSHAKE → PROTOCOL_NEGOTIATION
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_http1.{h,c}` | ~540 | Обёртка picohttpparser, объект запроса, chunked TE |
-| `io_http2.{h,c}` | ~770 | Сессия nghttp2, мультиплексирование потоков, HPACK, управление потоком |
-| `io_http3.{h,c}` | планируется | Транспорт QUIC через ngtcp2 + HTTP/3 через nghttp3 + QPACK + демультиплексирование CID |
-| `io_request.{h,c}` | ~350 | Унифицированная абстракция запроса для всех протоколов |
-| `io_response.{h,c}` | ~330 | Построитель ответов, сериализация заголовков |
-| `io_multipart.{h,c}` | ~360 | Разбор multipart form-data (RFC 2046) |
-| `io_proxy_proto.{h,c}` | ~370 | Декодер PROXY protocol v1/v2 |
+| `ioh_http1.{h,c}` | ~540 | Обёртка picohttpparser, объект запроса, chunked TE |
+| `ioh_http2.{h,c}` | ~770 | Сессия nghttp2, мультиплексирование потоков, HPACK, управление потоком |
+| `ioh_http3.{h,c}` | планируется | Транспорт QUIC через ngtcp2 + HTTP/3 через nghttp3 + QPACK + демультиплексирование CID |
+| `ioh_request.{h,c}` | ~350 | Унифицированная абстракция запроса для всех протоколов |
+| `ioh_response.{h,c}` | ~330 | Построитель ответов, сериализация заголовков |
+| `ioh_multipart.{h,c}` | ~360 | Разбор multipart form-data (RFC 2046) |
+| `ioh_proxy_proto.{h,c}` | ~370 | Декодер PROXY protocol v1/v2 |
 
 **Унифицированный поток обработки запроса:**
 ```
@@ -192,11 +192,11 @@ wolfSSL decrypt (if TLS)
     ↓
 ALPN → protocol-specific parser
     ↓
-Unified io_request_t
+Unified ioh_request_t
     ↓
 Router → Middleware → Handler
     ↓
-io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring send
+ioh_response_t → protocol-specific framing → wolfSSL encrypt → io_uring send
 ```
 
 **Плавная остановка HTTP/2 (двухфазный GOAWAY):**
@@ -224,11 +224,11 @@ io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring sen
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_radix.{h,c}` | ~530 | Radix trie (сжатое префиксное дерево), внутренний |
-| `io_router.{h,c}` | ~530 | Деревья по методам, авто-405/HEAD, коррекция пути |
-| `io_route_group.{h,c}` | ~310 | Вложенные группы с композицией префиксов |
-| `io_route_inspect.{h,c}` | ~130 | Обход маршрутов, интроспекция, привязка к liboas |
-| `io_middleware.{h,c}` | ~190 | Цепочка middleware, обработчик ошибок, паттерн next() |
+| `ioh_radix.{h,c}` | ~530 | Radix trie (сжатое префиксное дерево), внутренний |
+| `ioh_router.{h,c}` | ~530 | Деревья по методам, авто-405/HEAD, коррекция пути |
+| `ioh_route_group.{h,c}` | ~310 | Вложенные группы с композицией префиксов |
+| `ioh_route_inspect.{h,c}` | ~130 | Обход маршрутов, интроспекция, привязка к liboas |
+| `ioh_middleware.{h,c}` | ~190 | Цепочка middleware, обработчик ошибок, паттерн next() |
 
 **Наследие дизайна:** Radix trie + деревья по методам (httprouter), приоритет static > param >
 wildcard (httprouter/echo/bunrouter), handler возвращает ошибку (bunrouter/echo), группы
@@ -238,7 +238,7 @@ wildcard (httprouter/echo/bunrouter), handler возвращает ошибку 
 **Возможности маршрутизации:**
 - **Radix trie** со сжатым разделением префиксов, отдельное дерево на HTTP-метод
 - **Детерминированный приоритет** (не зависит от порядка): static > `:param` > `*wildcard`
-- **Регистрация по методам**: `io_router_get()`, `io_router_post()` и т.д.
+- **Регистрация по методам**: `ioh_router_get()`, `ioh_router_post()` и т.д.
 - **Параметры пути**: `/api/users/:id/config` -- типизированное извлечение (string, i64, u64, bool)
 - **Маршруты с подстановкой**: `/static/*path` -- захватывает оставшуюся часть пути
 - **Вложенные группы маршрутов**: композиция префиксов + наследование middleware по группам
@@ -247,8 +247,8 @@ wildcard (httprouter/echo/bunrouter), handler возвращает ошибку 
 - **Редирект завершающего слеша**: `/users/` <-> `/users` -> 301
 - **Автокоррекция пути**: `//foo/../bar` -> `/bar` -> 301
 - **Обнаружение конфликтов**: `/:id` + `/:name` на одном уровне -> ошибка при регистрации
-- **Интроспекция маршрутов**: `io_router_walk()` для генерации документации, привязка к liboas
-- **Метаданные маршрутов**: расширяемый `io_route_opts_t` с `oas_operation_t*` для liboas
+- **Интроспекция маршрутов**: `ioh_router_walk()` для генерации документации, привязка к liboas
+- **Метаданные маршрутов**: расширяемый `ioh_route_opts_t` с `oas_operation_t*` для liboas
 - **Пользовательские handler**: настраиваемые handler для 404 и 405
 - **Централизованная обработка ошибок**: handler возвращает int (0 или -errno) -> обработчик ошибок
 
@@ -256,12 +256,12 @@ wildcard (httprouter/echo/bunrouter), handler возвращает ошибку 
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_cors.{h,c}` | ~100 | Предварительные запросы CORS + заголовки |
-| `io_ratelimit.{h,c}` | ~200 | Token bucket по IP |
-| `io_auth.{h,c}` | ~170 | Basic, Bearer, хуки JWT |
-| `io_security.{h,c}` | ~220 | CSP, HSTS, X-Frame-Options, nosniff |
-| `io_logging.{h,c}` | планируется | Структурированные JSON-логи доступа/ошибок |
-| `io_metrics.{h,c}` | планируется | Lock-free thread-local метрики Prometheus |
+| `ioh_cors.{h,c}` | ~100 | Предварительные запросы CORS + заголовки |
+| `ioh_ratelimit.{h,c}` | ~200 | Token bucket по IP |
+| `ioh_auth.{h,c}` | ~170 | Basic, Bearer, хуки JWT |
+| `ioh_security.{h,c}` | ~220 | CSP, HSTS, X-Frame-Options, nosniff |
+| `ioh_logging.{h,c}` | планируется | Структурированные JSON-логи доступа/ошибок |
+| `ioh_metrics.{h,c}` | планируется | Lock-free thread-local метрики Prometheus |
 
 **Архитектура метрик (lock-free):** Каждый рабочий поток поддерживает thread-local реестр метрик,
 выровненный по 64-байтовым границам кеш-линий. Никаких атомарных операций на горячем пути
@@ -271,12 +271,12 @@ wildcard (httprouter/echo/bunrouter), handler возвращает ошибку 
 производительность на 30-40% при использовании общих атомарных счётчиков.
 
 **Стандартные метрики:**
-- `io_http_requests_total{method,status}` -- счётчик
-- `io_http_request_duration_seconds` -- гистограмма
-- `io_http_connections_active{protocol}` -- gauge (h1/h2/h3)
-- `io_tls_handshake_duration_seconds` -- гистограмма
+- `ioh_http_requests_total{method,status}` -- счётчик
+- `ioh_http_request_duration_seconds` -- гистограмма
+- `ioh_http_connections_active{protocol}` -- gauge (h1/h2/h3)
+- `ioh_tls_handshake_duration_seconds` -- гистограмма
 - `io_uring_sqe_submitted_total` -- счётчик
-- `io_bufpool_available` -- gauge
+- `ioh_bufpool_available` -- gauge
 
 **Эндпоинты здоровья:** `/health` (живучесть, всегда 200), `/ready` (готовность: TLS-сертификаты,
 пулы буферов, лимиты соединений).
@@ -285,38 +285,38 @@ wildcard (httprouter/echo/bunrouter), handler возвращает ошибку 
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_static.{h,c}` | ~380 | Раздача файлов, MIME, ETag, Range, sendfile |
-| `io_spa.{h,c}` | ~180 | SPA fallback, исключение API-префиксов |
-| `io_compress.{h,c}` | ~380 | Потоковый gzip/brotli + пред-сжатые .gz/.br |
-| `io_embed.{h,c}` | планируется | C23 #embed для встроенных ресурсов |
+| `ioh_static.{h,c}` | ~380 | Раздача файлов, MIME, ETag, Range, sendfile |
+| `ioh_spa.{h,c}` | ~180 | SPA fallback, исключение API-префиксов |
+| `ioh_compress.{h,c}` | ~380 | Потоковый gzip/brotli + пред-сжатые .gz/.br |
+| `ioh_embed.{h,c}` | планируется | C23 #embed для встроенных ресурсов |
 
 ### 7. WebSocket и SSE (`src/ws/`)
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_websocket.{h,c}` | ~330 | RFC 6455 через wslay, разбор фреймов, маскирование, ping/pong, фрагментация |
-| `io_sse.{h,c}` | ~260 | Формат SSE, heartbeat, Last-Event-ID |
+| `ioh_websocket.{h,c}` | ~330 | RFC 6455 через wslay, разбор фреймов, маскирование, ping/pong, фрагментация |
+| `ioh_sse.{h,c}` | ~260 | Формат SSE, heartbeat, Last-Event-ID |
 
-### 8. Интеграция с liboas (`src/middleware/io_oas.c`)
+### 8. Интеграция с liboas (`src/middleware/ioh_oas.c`)
 
 liboas -- это **отдельный проект** -- библиотека OpenAPI 3.2.0 для C23. iohttp предоставляет
 точки интеграции через middleware-адаптер, а НЕ встроенный движок OpenAPI.
 
 | Компонент | Строк | Описание |
 |-----------|-------|----------|
-| `io_oas.{h,c}` | планируется | Middleware-адаптер liboas, хелперы монтирования/публикации |
+| `ioh_oas.{h,c}` | планируется | Middleware-адаптер liboas, хелперы монтирования/публикации |
 
 **Архитектура интеграции (один поиск маршрута):**
 1. При запуске liboas компилирует документ OpenAPI -> `oas_compiled_api_t`
-2. Каждый маршрут iohttp хранит `oas_operation_t*` через `io_route_opts_t.oas_operation`
+2. Каждый маршрут iohttp хранит `oas_operation_t*` через `ioh_route_opts_t.oas_operation`
 3. В рантайме router iohttp находит маршрут (один поиск) -> middleware получает уже найденную операцию
 4. Middleware liboas валидирует запрос/ответ по схеме операции
 
 **Что iohttp предоставляет для liboas:**
-- Сопоставление `io_request_t` -> `oas_runtime_request_t`
-- Сопоставление `io_response_t` -> `oas_runtime_response_t`
-- `io_tls_peer_info_t` -> `oas_security_ctx_t` (метаданные TLS/mTLS)
-- `io_conn_info_t` -> реальный IP клиента (после декодирования PROXY protocol)
+- Сопоставление `ioh_request_t` -> `oas_runtime_request_t`
+- Сопоставление `ioh_response_t` -> `oas_runtime_response_t`
+- `ioh_tls_peer_info_t` -> `oas_security_ctx_t` (метаданные TLS/mTLS)
+- `ioh_conn_info_t` -> реальный IP клиента (после декодирования PROXY protocol)
 - Хук валидации запроса перед handler
 - Хук валидации ответа после handler
 - Хелпер публикации `/openapi.json`
@@ -332,9 +332,9 @@ liboas -- это **отдельный проект** -- библиотека Ope
 2. (optional) Read PROXY protocol header → extract real client IP
 3. wolfSSL_accept() via custom I/O callbacks
 4. io_uring recv → provided buffer → wolfSSL_read() → plaintext
-5. picohttpparser parse → io_request_t
+5. picohttpparser parse → ioh_request_t
 6. Router lookup → middleware chain → handler
-7. Handler writes io_response_t
+7. Handler writes ioh_response_t
 8. Serialize headers → wolfSSL_write() → io_uring send
 ```
 
@@ -343,7 +343,7 @@ liboas -- это **отдельный проект** -- библиотека Ope
 ```
 1-3. Same as HTTP/1.1 (ALPN selects h2)
 4. io_uring recv → wolfSSL_read() → nghttp2_session_mem_recv()
-5. nghttp2 callbacks fire per-stream → io_request_t per stream
+5. nghttp2 callbacks fire per-stream → ioh_request_t per stream
 6. Router → middleware → handler (per stream)
 7. nghttp2_submit_response() → nghttp2_session_mem_send2()
 8. wolfSSL_write() → io_uring send
@@ -354,7 +354,7 @@ liboas -- это **отдельный проект** -- библиотека Ope
 ```
 1. io_uring recv (UDP) → ngtcp2_conn_read_pkt()
 2. QUIC decryption via ngtcp2_crypto_wolfssl
-3. nghttp3_conn_read_stream() → per-stream callbacks → io_request_t
+3. nghttp3_conn_read_stream() → per-stream callbacks → ioh_request_t
 4. Router → middleware → handler
 5. nghttp3_conn_submit_response() → ngtcp2_conn_write_pkt()
 6. io_uring send (UDP)
@@ -374,7 +374,7 @@ liboas -- это **отдельный проект** -- библиотека Ope
 - **Аллокаторы arena** -- время жизни на один запрос, освобождение после отправки ответа
 - **Пути zero-copy** -- splice для статических файлов, `SEND_ZC` для больших ответов
 - **`[[nodiscard]]`** -- на всех функциях выделения памяти
-- **`static_assert`** -- проверки размеров структур на этапе компиляции (например, `sizeof(io_conn_t) <= 512`)
+- **`static_assert`** -- проверки размеров структур на этапе компиляции (например, `sizeof(ioh_conn_t) <= 512`)
 - **Отсутствие неконтролируемого роста кучи** -- все буферы ограничены, слишком большие запросы отклоняются
 
 ---
@@ -383,11 +383,11 @@ liboas -- это **отдельный проект** -- библиотека Ope
 
 Двухуровневая конфигурация:
 
-1. **Этап компиляции** -- `IO_MAX_CONNECTIONS`, `IO_MAX_HEADERS`, `IO_ENABLE_HTTP2` и т.д.
-2. **Этап выполнения** -- структура `io_server_config_t`, передаваемая в `io_server_create()`
+1. **Этап компиляции** -- `IOH_MAX_CONNECTIONS`, `IOH_MAX_HEADERS`, `IOH_ENABLE_HTTP2` и т.д.
+2. **Этап выполнения** -- структура `ioh_server_config_t`, передаваемая в `ioh_server_create()`
 
 ```c
-io_server_config_t cfg = {
+ioh_server_config_t cfg = {
     .listen_addr   = "0.0.0.0",
     .listen_port   = 8080,
     .tls_cert      = "/path/to/cert.pem",

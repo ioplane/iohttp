@@ -149,7 +149,7 @@ SQ = 256, CQ = 1024 (4x для запаса multishot overflow)
 
 ### io_uring vs epoll: нюансы
 
-io_uring **не всегда быстрее**. При batch=1 он **медленнее** epoll (2600 нс vs 2200 нс с CPU-mitigation). Преимущество появляется при больших батчах и включённых Spectre/Meltdown mitigations (syscall overhead 230 нс → 700 нс). **Безопасность**: Google отключил io_uring на ChromeOS, продакшн-серверах и Android-приложениях; 60% эксплойтов bug bounty 2022 целились в io_uring. Необходимо проверять `/proc/sys/kernel/io_uring_disabled` и учитывать seccomp-профили контейнеров.
+io_uring **не всегда быстрее**. При batch=1 он **медленнее** epoll (2600 нс vs 2200 нс с CPU-mitigation). Преимущество появляется при больших батчах и включённых Spectre/Meltdown mitigations (syscall overhead 230 нс → 700 нс). **Безопасность**: Google отключил io_uring на ChromeOS, продакшн-серверах и Android-приложениях; 60% эксплойтов bug bounty 2022 целились в io_uring. Необходимо проверять `/proc/sys/kernel/ioh_uring_disabled` и учитывать seccomp-профили контейнеров.
 
 ---
 

@@ -8,7 +8,7 @@
  * A shuttle function transfers ciphertext between the two sides in memory.
  */
 
-#include "tls/io_tls.h"
+#include "tls/ioh_tls.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -51,10 +51,10 @@ static void init_cert_paths(void)
 typedef struct {
     WOLFSSL_CTX *ctx;
     WOLFSSL *ssl;
-    uint8_t cipher_in_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_in_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_in_len;
     size_t cipher_in_pos;
-    uint8_t cipher_out_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_out_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_out_len;
 } test_tls_client_t;
 
@@ -88,7 +88,7 @@ static int client_send_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx)
     (void)ssl;
     test_tls_client_t *client = ctx;
 
-    size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
+    size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
     if (space == 0) {
         return WOLFSSL_CBIO_ERR_WANT_WRITE;
     }
@@ -155,32 +155,32 @@ static void client_destroy(test_tls_client_t *client)
 
 /* ---- Shuttle: transfer ciphertext between server and client ---- */
 
-static void shuttle_data(io_tls_conn_t *server, test_tls_client_t *client)
+static void shuttle_data(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     /* Server output -> client input */
     const uint8_t *sout;
     size_t slen;
-    (void)io_tls_get_output(server, &sout, &slen);
+    (void)ioh_tls_get_output(server, &sout, &slen);
     if (slen > 0) {
-        size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
+        size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
         size_t copy = slen < space ? slen : space;
         if (copy > 0) {
             memcpy(client->cipher_in_buf + client->cipher_in_len, sout, copy);
             client->cipher_in_len += copy;
-            io_tls_consume_output(server, copy);
+            ioh_tls_consume_output(server, copy);
         }
     }
 
     /* Client output -> server input */
     if (client->cipher_out_len > 0) {
-        (void)io_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
+        (void)ioh_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
         client->cipher_out_len = 0;
     }
 }
 
 /* ---- Handshake helper: drive both sides to completion ---- */
 
-static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client)
+static bool do_buffer_handshake(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     bool server_done = false;
     bool client_done = false;
@@ -189,7 +189,7 @@ static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client
         shuttle_data(server, client);
 
         if (!server_done) {
-            int ret = io_tls_handshake(server);
+            int ret = ioh_tls_handshake(server);
             if (ret == 0) {
                 server_done = true;
             } else if (ret != -EAGAIN) {
@@ -235,15 +235,15 @@ void tearDown(void)
 
 void test_tls_buffer_handshake(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -254,23 +254,23 @@ void test_tls_buffer_handshake(void)
     TEST_ASSERT_TRUE(sconn->handshake_done);
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test: data roundtrip through buffer API ---- */
 
 void test_tls_buffer_data_roundtrip(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -281,7 +281,7 @@ void test_tls_buffer_data_roundtrip(void)
 
     /* Server -> Client: write plaintext through buffer API */
     const char *server_msg = "Hello from server";
-    int wret = io_tls_write(sconn, (const uint8_t *)server_msg, strlen(server_msg));
+    int wret = ioh_tls_write(sconn, (const uint8_t *)server_msg, strlen(server_msg));
     TEST_ASSERT_EQUAL_INT((int)strlen(server_msg), wret);
 
     /* Shuttle server ciphertext to client */
@@ -303,28 +303,28 @@ void test_tls_buffer_data_roundtrip(void)
 
     /* Server reads plaintext through buffer API */
     memset(rbuf, 0, sizeof(rbuf));
-    rret = io_tls_read(sconn, (uint8_t *)rbuf, sizeof(rbuf));
+    rret = ioh_tls_read(sconn, (uint8_t *)rbuf, sizeof(rbuf));
     TEST_ASSERT_EQUAL_INT((int)strlen(client_msg), rret);
     TEST_ASSERT_EQUAL_STRING_LEN(client_msg, rbuf, (size_t)rret);
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test: multiple messages in sequence ---- */
 
 void test_tls_buffer_multiple_messages(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -344,7 +344,7 @@ void test_tls_buffer_multiple_messages(void)
         const char *msg = messages[i];
         size_t mlen = strlen(msg);
 
-        int wret = io_tls_write(sconn, (const uint8_t *)msg, mlen);
+        int wret = ioh_tls_write(sconn, (const uint8_t *)msg, mlen);
         TEST_ASSERT_EQUAL_INT((int)mlen, wret);
 
         shuttle_data(sconn, client);
@@ -366,29 +366,29 @@ void test_tls_buffer_multiple_messages(void)
         shuttle_data(sconn, client);
 
         char rbuf[256];
-        int rret = io_tls_read(sconn, (uint8_t *)rbuf, sizeof(rbuf));
+        int rret = ioh_tls_read(sconn, (uint8_t *)rbuf, sizeof(rbuf));
         TEST_ASSERT_EQUAL_INT((int)mlen, rret);
         TEST_ASSERT_EQUAL_STRING_LEN(msg, rbuf, mlen);
     }
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test: large payload (8KB) through buffer API ---- */
 
 void test_tls_buffer_large_payload(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -416,7 +416,7 @@ void test_tls_buffer_large_payload(void)
         /* Write as much as possible */
         if (total_written < PAYLOAD_SIZE) {
             size_t remaining = PAYLOAD_SIZE - total_written;
-            int wret = io_tls_write(sconn, payload + total_written, remaining);
+            int wret = ioh_tls_write(sconn, payload + total_written, remaining);
             if (wret > 0) {
                 total_written += (size_t)wret;
             }
@@ -443,23 +443,23 @@ void test_tls_buffer_large_payload(void)
     free(received);
     free(payload);
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test: graceful shutdown via buffer API ---- */
 
 void test_tls_buffer_shutdown(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -470,7 +470,7 @@ void test_tls_buffer_shutdown(void)
 
     /* Verify data works before shutdown */
     const char *msg = "pre-shutdown";
-    int wret = io_tls_write(sconn, (const uint8_t *)msg, strlen(msg));
+    int wret = ioh_tls_write(sconn, (const uint8_t *)msg, strlen(msg));
     TEST_ASSERT_EQUAL_INT((int)strlen(msg), wret);
     shuttle_data(sconn, client);
     char rbuf[64];
@@ -480,7 +480,7 @@ void test_tls_buffer_shutdown(void)
     /* Server initiates shutdown */
     bool shutdown_done = false;
     for (int i = 0; i < 100; i++) {
-        int sret = io_tls_shutdown(sconn);
+        int sret = ioh_tls_shutdown(sconn);
         shuttle_data(sconn, client);
 
         /* Client processes the close_notify */
@@ -496,8 +496,8 @@ void test_tls_buffer_shutdown(void)
     TEST_ASSERT_TRUE_MESSAGE(shutdown_done, "TLS shutdown did not complete");
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test runner ---- */

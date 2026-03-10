@@ -58,7 +58,7 @@ io_uring_enable_rings(&ring);
 ```c
 struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 io_uring_prep_multishot_accept(sqe, listen_fd, nullptr, nullptr, 0);
-io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(0, IO_OP_ACCEPT));
+io_uring_sqe_set_data64(sqe, IOH_ENCODE_USERDATA(0, IOH_OP_ACCEPT));
 // Handle IORING_CQE_F_MORE cessation → re-arm immediately
 ```
 
@@ -87,12 +87,12 @@ sqe->buf_group = bgid;
 struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 io_uring_prep_recv(sqe, fd, buf, len, 0);
 sqe->flags |= IOSQE_IO_LINK;
-io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(conn_id, IO_OP_RECV));
+io_uring_sqe_set_data64(sqe, IOH_ENCODE_USERDATA(conn_id, IOH_OP_RECV));
 
 // SQE 2: linked timeout (auto-cancels recv if expired)
 struct io_uring_sqe *tsqe = io_uring_get_sqe(ring);
 io_uring_prep_link_timeout(tsqe, &ts, 0);
-io_uring_sqe_set_data64(tsqe, IO_ENCODE_USERDATA(conn_id, IO_OP_TIMEOUT));
+io_uring_sqe_set_data64(tsqe, IOH_ENCODE_USERDATA(conn_id, IOH_OP_TIMEOUT));
 ```
 
 ### Registered Buffers (DMA acceleration)
@@ -141,24 +141,24 @@ io_uring_prep_splice(sqe, file_fd, offset, pipe_wr, -1, len, SPLICE_F_MOVE);
 ### user_data Encoding
 ```c
 // Pack operation type into user_data for fast CQE discrimination
-#define IO_OP_BITS    8
-#define IO_CONN_BITS  56
+#define IOH_OP_BITS    8
+#define IOH_CONN_BITS  56
 
-#define IO_ENCODE_USERDATA(conn_id, op)  (((uint64_t)(conn_id) << IO_OP_BITS) | (uint8_t)(op))
-#define IO_DECODE_OP(ud)                 ((uint8_t)((ud) & 0xFF))
-#define IO_DECODE_CONN(ud)               ((ud) >> IO_OP_BITS)
+#define IOH_ENCODE_USERDATA(conn_id, op)  (((uint64_t)(conn_id) << IOH_OP_BITS) | (uint8_t)(op))
+#define IOH_DECODE_OP(ud)                 ((uint8_t)((ud) & 0xFF))
+#define IOH_DECODE_CONN(ud)               ((ud) >> IOH_OP_BITS)
 
 typedef enum : uint8_t {
-    IO_OP_ACCEPT   = 0x01,
-    IO_OP_RECV     = 0x02,
-    IO_OP_SEND     = 0x03,
-    IO_OP_TIMEOUT  = 0x04,
-    IO_OP_FILE     = 0x05,
-    IO_OP_TLS      = 0x06,
-    IO_OP_SIGNAL   = 0x07,
-    IO_OP_CLOSE    = 0x08,
-    IO_OP_SEND_ZC  = 0x09,
-} io_op_type_t;
+    IOH_OP_ACCEPT   = 0x01,
+    IOH_OP_RECV     = 0x02,
+    IOH_OP_SEND     = 0x03,
+    IOH_OP_TIMEOUT  = 0x04,
+    IOH_OP_FILE     = 0x05,
+    IOH_OP_TLS      = 0x06,
+    IOH_OP_SIGNAL   = 0x07,
+    IOH_OP_CLOSE    = 0x08,
+    IOH_OP_SEND_ZC  = 0x09,
+} ioh_op_type_t;
 ```
 
 ### CQE Processing Loop
@@ -166,22 +166,22 @@ typedef enum : uint8_t {
 unsigned head;
 struct io_uring_cqe *cqe;
 io_uring_for_each_cqe(ring, head, cqe) {
-    uint8_t op = IO_DECODE_OP(cqe->user_data);
-    uint64_t conn_id = IO_DECODE_CONN(cqe->user_data);
+    uint8_t op = IOH_DECODE_OP(cqe->user_data);
+    uint64_t conn_id = IOH_DECODE_CONN(cqe->user_data);
 
     switch (op) {
-    case IO_OP_ACCEPT:
+    case IOH_OP_ACCEPT:
         // Handle new connection
         // Check IORING_CQE_F_MORE for multishot continuation
         if (!(cqe->flags & IORING_CQE_F_MORE)) {
             // Re-arm multishot accept
         }
         break;
-    case IO_OP_RECV:
+    case IOH_OP_RECV:
         // Check provided buffer id: cqe->flags >> IORING_CQE_BUFFER_SHIFT
         // Handle -ENOBUFS: apply backpressure, do NOT drop connection
         break;
-    case IO_OP_SEND_ZC:
+    case IOH_OP_SEND_ZC:
         // Handle both CQEs: completion and IORING_CQE_F_NOTIF (buffer release)
         if (cqe->flags & IORING_CQE_F_NOTIF) {
             // Buffer notification — safe to free/reuse send buffer now
@@ -327,7 +327,7 @@ For ordered multi-buffer sends: `IOSQE_IO_LINK` chains.
 - Track pending SQE count: if > 75% of queue_depth, defer new work
 - Return 503 Service Unavailable for new HTTP requests during overload
 - WebSocket/SSE: send close frame with 1013 (Try Again Later)
-- Metric: `io_overload_total` counter
+- Metric: `ioh_overload_total` counter
 
 ## Anti-patterns (NEVER DO)
 

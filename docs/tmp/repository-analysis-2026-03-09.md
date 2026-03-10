@@ -19,13 +19,13 @@
 3. `cmake --build --preset clang-asan`
 4. `ctest --preset clang-asan --output-on-failure`
 5. Повторный запуск только упавших ASan-тестов:
-   `ctest --test-dir build/clang-asan -R "test_io_router|test_io_websocket|test_io_http2|test_http2_server" --output-on-failure`
+   `ctest --test-dir build/clang-asan -R "test_ioh_router|test_ioh_websocket|test_ioh_http2|test_http2_server" --output-on-failure`
 
 Результаты:
 
 - `quality.sh`: `PASS: 5, FAIL: 1` (падение на PVS в тестах).
 - `clang-debug` (через quality): `46/46` passed.
-- `clang-asan`: `42/46` passed (падают `test_io_router`, `test_io_http2`, `test_http2_server`; `test_io_websocket` при повторном запуске проходит).
+- `clang-asan`: `42/46` passed (падают `test_ioh_router`, `test_ioh_http2`, `test_http2_server`; `test_ioh_websocket` при повторном запуске проходит).
 
 ## 3) Карта проекта
 
@@ -44,12 +44,12 @@
 
 ### Ключевые CMake-таргеты (по `CMakeLists.txt`)
 
-- Core: `io_loop`, `io_conn`, `io_log`, `io_server`, `io_ctx`, `io_buffer`
-- TLS: `io_tls`
-- HTTP: `io_request`, `io_response`, `io_http1`, `io_http2`, `io_http3`, `io_quic`, `io_proxy_proto`, `io_multipart`, `io_alt_svc`
-- Router: `io_radix`, `io_router`, `io_route_group`, `io_route_inspect`, `io_route_meta`
-- Middleware: `io_middleware`, `io_cors`, `io_ratelimit`, `io_security`, `io_auth`
-- Static/streaming: `io_static`, `io_spa`, `io_compress`, `io_sse`, `io_websocket`
+- Core: `ioh_loop`, `ioh_conn`, `ioh_log`, `ioh_server`, `ioh_ctx`, `ioh_buffer`
+- TLS: `ioh_tls`
+- HTTP: `ioh_request`, `ioh_response`, `ioh_http1`, `ioh_http2`, `ioh_http3`, `ioh_quic`, `ioh_proxy_proto`, `ioh_multipart`, `ioh_alt_svc`
+- Router: `ioh_radix`, `ioh_router`, `ioh_route_group`, `ioh_route_inspect`, `ioh_route_meta`
+- Middleware: `ioh_middleware`, `ioh_cors`, `ioh_ratelimit`, `ioh_security`, `ioh_auth`
+- Static/streaming: `ioh_static`, `ioh_spa`, `ioh_compress`, `ioh_sse`, `ioh_websocket`
 
 ## 4) Потенциальные ошибки и баги
 
@@ -59,7 +59,7 @@
 
 ASan стабильно падает в:
 
-- `test_io_http2`
+- `test_ioh_http2`
 - `test_http2_server`
 
 Чтение освобожденной памяти в `resp_data_read_cb`.
@@ -67,13 +67,13 @@ ASan стабильно падает в:
 ### Техническая причина
 
 1. В `submit_response()` data provider сохраняет указатель на `resp->body`:
-   - `src/http/io_http2.c:253` (`rd->body = resp->body`)
+   - `src/http/ioh_http2.c:253` (`rd->body = resp->body`)
 2. После `submit_response(...)` response уничтожается:
-   - `src/http/io_http2.c:475` (`io_response_destroy(&resp)`)
-3. `io_response_destroy()` освобождает `resp->body`:
-   - `src/http/io_response.c:72`
+   - `src/http/ioh_http2.c:475` (`ioh_response_destroy(&resp)`)
+3. `ioh_response_destroy()` освобождает `resp->body`:
+   - `src/http/ioh_response.c:72`
 4. Позже nghttp2 вызывает data callback, который читает уже освобожденный буфер:
-   - `src/http/io_http2.c:171` (`memcpy(buf, rd->body + rd->offset, n)`)
+   - `src/http/ioh_http2.c:171` (`memcpy(buf, rd->body + rd->offset, n)`)
 
 ### Риск
 
@@ -84,22 +84,22 @@ ASan стабильно падает в:
 
 ### Симптом
 
-ASan стабильно падает в `test_io_router`:
+ASan стабильно падает в `test_ioh_router`:
 
-- stack-use-after-return, чтение данных после возврата из `io_router_dispatch`.
+- stack-use-after-return, чтение данных после возврата из `ioh_router_dispatch`.
 
 ### Техническая причина
 
-1. `io_router_dispatch()` нормализует path во временный stack-буфер:
-   - `src/router/io_router.c:439` (`char normalized[IO_MAX_URI_SIZE]`)
-2. `io_radix_lookup()` сохраняет `param.value` как указатель внутрь переданного path:
-   - `src/router/io_radix.c:552`, `:582`
-3. Эти указатели копируются в `io_route_match_t` и возвращаются наружу:
-   - `src/router/io_router.c:482`, `:497`
+1. `ioh_router_dispatch()` нормализует path во временный stack-буфер:
+   - `src/router/ioh_router.c:439` (`char normalized[IOH_MAX_URI_SIZE]`)
+2. `ioh_radix_lookup()` сохраняет `param.value` как указатель внутрь переданного path:
+   - `src/router/ioh_radix.c:552`, `:582`
+3. Эти указатели копируются в `ioh_route_match_t` и возвращаются наружу:
+   - `src/router/ioh_router.c:482`, `:497`
 4. Далее копируются в `req->params` в runtime:
-   - `src/core/io_server.c:383-386`
+   - `src/core/ioh_server.c:383-386`
 
-После возврата из `io_router_dispatch` stack-буфер `normalized` недействителен, а указатели на него остаются в match/request параметрах.
+После возврата из `ioh_router_dispatch` stack-буфер `normalized` недействителен, а указатели на него остаются в match/request параметрах.
 
 ### Риск
 
@@ -110,7 +110,7 @@ ASan стабильно падает в `test_io_router`:
 `scripts/quality.sh` падает по двум сообщениям PVS:
 
 - `tests/integration/test_limits.c:95` (`V590`)
-- `tests/unit/test_io_log.c:153` (`V618`)
+- `tests/unit/test_ioh_log.c:153` (`V618`)
 
 Это не production runtime-баги, но:
 

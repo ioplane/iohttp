@@ -3,11 +3,11 @@
  * @brief Integration tests: middleware execution through full TCP pipeline.
  */
 
-#include "core/io_ctx.h"
-#include "core/io_server.h"
-#include "http/io_request.h"
-#include "middleware/io_middleware.h"
-#include "router/io_router.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
+#include "http/ioh_request.h"
+#include "middleware/ioh_middleware.h"
+#include "router/ioh_router.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -86,16 +86,16 @@ static ssize_t recv_response(int fd, char *buf, size_t cap)
 
 /* ---- Handlers ---- */
 
-static int hello_handler(io_ctx_t *c)
+static int hello_handler(ioh_ctx_t *c)
 {
-    return io_ctx_text(c, 200, "Hello, World!");
+    return ioh_ctx_text(c, 200, "Hello, World!");
 }
 
 /* ---- Middleware ---- */
 
-static int custom_header_mw(io_ctx_t *c, io_handler_fn next)
+static int custom_header_mw(ioh_ctx_t *c, ioh_handler_fn next)
 {
-    (void)io_ctx_set_header(c, "X-Custom", "applied");
+    (void)ioh_ctx_set_header(c, "X-Custom", "applied");
     return next(c);
 }
 
@@ -103,30 +103,30 @@ static int custom_header_mw(io_ctx_t *c, io_handler_fn next)
 
 static uint16_t next_port = 19080;
 
-static io_server_t *make_server(void)
+static ioh_server_t *make_server(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = next_port++;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
-    return io_server_create(&cfg);
+    return ioh_server_create(&cfg);
 }
 
 /* ---- Test 1: Custom middleware adds X-Custom header ---- */
 
 void test_middleware_custom_header(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_use(router, custom_header_mw));
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_use(router, custom_header_mw));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -140,7 +140,7 @@ void test_middleware_custom_header(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -152,31 +152,31 @@ void test_middleware_custom_header(void)
                                  "Expected X-Custom: applied header in response");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 2: Middleware short-circuit without calling next ---- */
 
-static int short_circuit_mw(io_ctx_t *c, io_handler_fn next)
+static int short_circuit_mw(ioh_ctx_t *c, ioh_handler_fn next)
 {
     (void)next;
-    (void)io_ctx_set_header(c, "X-Short-Circuit", "yes");
-    return io_ctx_text(c, 204, "");
+    (void)ioh_ctx_set_header(c, "X-Short-Circuit", "yes");
+    return ioh_ctx_text(c, 204, "");
 }
 
 void test_middleware_short_circuit(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_use(router, short_circuit_mw));
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_use(router, short_circuit_mw));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -190,7 +190,7 @@ void test_middleware_short_circuit(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -204,37 +204,37 @@ void test_middleware_short_circuit(void)
                              "Handler should not have been called when middleware short-circuits");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 3: Multiple middleware execute in order ---- */
 
-static int first_mw(io_ctx_t *c, io_handler_fn next)
+static int first_mw(ioh_ctx_t *c, ioh_handler_fn next)
 {
-    (void)io_ctx_set_header(c, "X-First", "1");
+    (void)ioh_ctx_set_header(c, "X-First", "1");
     return next(c);
 }
 
-static int second_mw(io_ctx_t *c, io_handler_fn next)
+static int second_mw(ioh_ctx_t *c, ioh_handler_fn next)
 {
-    (void)io_ctx_set_header(c, "X-Second", "2");
+    (void)ioh_ctx_set_header(c, "X-Second", "2");
     return next(c);
 }
 
 void test_middleware_chain_order(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_use(router, first_mw));
-    TEST_ASSERT_EQUAL_INT(0, io_router_use(router, second_mw));
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_use(router, first_mw));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_use(router, second_mw));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -248,7 +248,7 @@ void test_middleware_chain_order(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -261,8 +261,8 @@ void test_middleware_chain_order(void)
                                  "Expected X-Second header from second middleware");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 int main(void)

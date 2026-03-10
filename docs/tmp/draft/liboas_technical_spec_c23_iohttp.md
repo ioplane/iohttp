@@ -146,7 +146,7 @@
 - HAProxy PROXY protocol specification  
   <https://www.haproxy.org/download/3.4/doc/proxy-protocol.txt>
 - Linux `io_uring(7)`  
-  <https://man7.org/linux/man-pages/man7/io_uring.7.html>
+  <https://man7.org/linux/man-pages/man7/ioh_uring.7.html>
 
 ---
 
@@ -350,13 +350,13 @@
 
 Адаптер должен обеспечивать:
 
-- маппинг `io_request_t` → `oas_runtime_request_t`;
-- маппинг `io_response_t` → `oas_runtime_response_t`;
+- маппинг `ioh_request_t` → `oas_runtime_request_t`;
+- маппинг `ioh_response_t` → `oas_runtime_response_t`;
 - маппинг `iohttp` security/TLS/auth context → `oas_security_ctx_t`;
 - middleware hooks для request validation;
 - middleware hooks для response validation;
 - mount/publish helpers для `/openapi.json`, `/openapi.yaml` и UI endpoints;
-- регистрацию связи `io_route_t` ↔ `oas_operation_t`.
+- регистрацию связи `ioh_route_t` ↔ `oas_operation_t`.
 
 ---
 
@@ -516,12 +516,12 @@ int oas_compile_document(
 
 ```c
 int oas_iohttp_mount_api(
-    io_server_t *srv,
+    ioh_server_t *srv,
     const oas_compiled_api_t *api,
     const oas_iohttp_mount_options_t *opts);
 
 int oas_iohttp_bind_route(
-    io_route_t *route,
+    ioh_route_t *route,
     const oas_operation_t *operation);
 ```
 
@@ -544,7 +544,7 @@ int oas_validate_response(
 
 ```c
 int oas_iohttp_publish_openapi_json(
-    io_server_t *srv,
+    ioh_server_t *srv,
     const char *path,
     const oas_compiled_api_t *api,
     const oas_publish_options_t *opts);

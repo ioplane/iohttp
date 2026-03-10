@@ -3,9 +3,9 @@
  * @brief Integration tests for request header size (431) and body size (413) limits.
  */
 
-#include "core/io_ctx.h"
-#include "core/io_server.h"
-#include "http/io_request.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
+#include "http/ioh_request.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -54,28 +54,28 @@ static uint16_t get_bound_port(int fd)
 
 /* ---- Handler ---- */
 
-static int on_request_cb(io_ctx_t *c, void *user_data)
+static int on_request_cb(ioh_ctx_t *c, void *user_data)
 {
     (void)user_data;
-    return io_ctx_text(c, 200, "OK");
+    return ioh_ctx_text(c, 200, "OK");
 }
 
 /* ---- Test 1: Oversized headers return 431 ---- */
 
 void test_oversized_header_returns_431(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 19200;
     cfg.max_connections = 16;
     cfg.queue_depth = 64;
     cfg.max_header_size = 256;
 
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, on_request_cb, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, on_request_cb, nullptr));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -83,7 +83,7 @@ void test_oversized_header_returns_431(void)
     TEST_ASSERT_TRUE(client >= 0);
 
     /* Let server accept */
-    (void)io_server_run_once(srv, 200);
+    (void)ioh_server_run_once(srv, 200);
 
     /* Build a request with headers exceeding 256 bytes */
     char big_request[512];
@@ -105,7 +105,7 @@ void test_oversized_header_returns_431(void)
 
     /* Process request */
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     /* Read response */
@@ -120,25 +120,25 @@ void test_oversized_header_returns_431(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(buf, "431"), "Expected 431 in response");
 
     close(client);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 /* ---- Test 2: Oversized body returns 413 ---- */
 
 void test_oversized_body_returns_413(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 19201;
     cfg.max_connections = 16;
     cfg.queue_depth = 64;
     cfg.max_body_size = 64;
 
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, on_request_cb, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, on_request_cb, nullptr));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -146,7 +146,7 @@ void test_oversized_body_returns_413(void)
     TEST_ASSERT_TRUE(client >= 0);
 
     /* Let server accept */
-    (void)io_server_run_once(srv, 200);
+    (void)ioh_server_run_once(srv, 200);
 
     /* Send a POST with Content-Length exceeding max_body_size */
     const char *http_req = "POST / HTTP/1.1\r\n"
@@ -158,7 +158,7 @@ void test_oversized_body_returns_413(void)
 
     /* Process request */
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     /* Read response */
@@ -173,7 +173,7 @@ void test_oversized_body_returns_413(void)
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(buf, "413"), "Expected 413 in response");
 
     close(client);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)

@@ -10,7 +10,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue?style=for-the-badge" alt="License"></a>
   <img src="https://img.shields.io/badge/C23-ISO%2FIEC%209899%3A2024-blue?style=for-the-badge" alt="C23">
   <img src="https://img.shields.io/badge/Linux-6.7%2B-orange?style=for-the-badge&logo=linux&logoColor=white" alt="Linux">
-  <img src="https://img.shields.io/badge/io__uring-native-green?style=for-the-badge" alt="io_uring">
+  <img src="https://img.shields.io/badge/ioh__uring-native-green?style=for-the-badge" alt="io_uring">
   <img src="https://img.shields.io/badge/wolfSSL-TLS%201.3-purple?style=for-the-badge" alt="wolfSSL">
   <img src="https://img.shields.io/badge/PROXY%20protocol-v1%2Fv2-teal?style=for-the-badge" alt="PROXY Protocol">
   <img src="https://img.shields.io/badge/version-0.1.0--dev-red?style=for-the-badge" alt="Version">
@@ -82,7 +82,7 @@ graph TB
 - **Linked timeouts** — HEADER (30с) / BODY (60с) / KEEPALIVE (65с) через `IORING_OP_LINK_TIMEOUT`
 - **Ограничения запросов** — 431 Request Header Fields Too Large, 413 Content Too Large
 - **Обработка сигналов** — signalfd + io_uring: SIGTERM → плавная остановка, SIGQUIT → немедленная
-- **Структурированное логирование** — io_log с уровнями ERROR/WARN/INFO/DEBUG, пользовательские sink'и
+- **Структурированное логирование** — ioh_log с уровнями ERROR/WARN/INFO/DEBUG, пользовательские sink'и
 - **Идентификатор запроса** — X-Request-Id, 128-бит hex (arc4random), проброс входящего ID
 - **PROXY protocol v1/v2** — интеграция в accept→recv pipeline, только явный режим
 
@@ -145,25 +145,25 @@ stateDiagram-v2
 ## Пример
 
 ```c
-#include "core/io_server.h"
-#include "core/io_ctx.h"
+#include "core/ioh_server.h"
+#include "core/ioh_ctx.h"
 
-static int hello(io_ctx_t *c, void *data)
+static int hello(ioh_ctx_t *c, void *data)
 {
     (void)data;
-    return io_ctx_json(c, 200, "{\"message\":\"hello\"}");
+    return ioh_ctx_json(c, 200, "{\"message\":\"hello\"}");
 }
 
 int main(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 8080;
 
-    io_server_t *srv = io_server_create(&cfg);
-    io_server_set_on_request(srv, hello, nullptr);
-    io_server_run(srv);
-    io_server_destroy(srv);
+    ioh_server_t *srv = ioh_server_create(&cfg);
+    ioh_server_set_on_request(srv, hello, nullptr);
+    ioh_server_run(srv);
+    ioh_server_destroy(srv);
 }
 ```
 

@@ -4,7 +4,7 @@
 
 **Goal:** Make the HTTP/1.1 TCP pipeline production-viable by adding linked timeouts, request limit enforcement, signal handling, structured logging, request ID middleware, and PROXY protocol integration.
 
-**Architecture:** Extend `io_server.c` pipeline with `IORING_OP_LINK_TIMEOUT` linked to every recv operation, timeout phase tracking in `io_conn_t`, Content-Length/header-size validation in the parse path, signalfd-based SIGTERM/SIGQUIT handling through the io_uring ring, a minimal structured logging module (`io_log`), request ID generation in `dispatch_request()`, and PROXY protocol v1/v2 decoding wired into the accept→recv flow.
+**Architecture:** Extend `ioh_server.c` pipeline with `IORING_OP_LINK_TIMEOUT` linked to every recv operation, timeout phase tracking in `ioh_conn_t`, Content-Length/header-size validation in the parse path, signalfd-based SIGTERM/SIGQUIT handling through the io_uring ring, a minimal structured logging module (`ioh_log`), request ID generation in `dispatch_request()`, and PROXY protocol v1/v2 decoding wired into the accept→recv flow.
 
 **Tech Stack:** C23, liburing (linked timeouts, signalfd), picohttpparser, wolfSSL, Unity tests, Linux kernel 6.7+.
 
@@ -26,16 +26,16 @@ ctest --preset clang-debug
 ```
 
 **Existing files used (read before implementing):**
-- `src/core/io_server.c` — main pipeline (modify heavily)
-- `src/core/io_server.h` — server config and API (modify)
-- `src/core/io_conn.h` — connection struct (modify)
-- `src/core/io_conn.c` — connection state machine (modify)
-- `src/core/io_loop.h` — op types, user_data encoding (read-only)
-- `src/core/io_ctx.h` — per-request context (modify for request ID)
-- `src/http/io_http1.h` — parse limits (read-only)
-- `src/http/io_proxy_proto.h` — decoder API (read-only)
-- `src/http/io_request.h` — request struct (read-only)
-- `src/http/io_response.h` — response builder (read-only)
+- `src/core/ioh_server.c` — main pipeline (modify heavily)
+- `src/core/ioh_server.h` — server config and API (modify)
+- `src/core/ioh_conn.h` — connection struct (modify)
+- `src/core/ioh_conn.c` — connection state machine (modify)
+- `src/core/ioh_loop.h` — op types, user_data encoding (read-only)
+- `src/core/ioh_ctx.h` — per-request context (modify for request ID)
+- `src/http/ioh_http1.h` — parse limits (read-only)
+- `src/http/ioh_proxy_proto.h` — decoder API (read-only)
+- `src/http/ioh_request.h` — request struct (read-only)
+- `src/http/ioh_response.h` — response builder (read-only)
 - `CMakeLists.txt` — test registration (modify)
 
 ---
@@ -45,40 +45,40 @@ ctest --preset clang-debug
 **Goal:** Link `IORING_OP_LINK_TIMEOUT` to every `arm_recv()` call. Three phases: HEADER (waiting for first complete request), BODY (waiting for Content-Length body), KEEPALIVE (idle between requests). On timeout → 408 Request Timeout or close.
 
 **Files:**
-- Modify: `src/core/io_conn.h` — add `timeout_phase` field
-- Modify: `src/core/io_server.c` — modify `arm_recv()`, add `IO_OP_TIMEOUT` CQE handler
-- Modify: `tests/unit/test_io_server.c` — timeout unit tests
+- Modify: `src/core/ioh_conn.h` — add `timeout_phase` field
+- Modify: `src/core/ioh_server.c` — modify `arm_recv()`, add `IOH_OP_TIMEOUT` CQE handler
+- Modify: `tests/unit/test_ioh_server.c` — timeout unit tests
 - Create: `tests/integration/test_timeout.c` — timeout integration tests
 - Modify: `CMakeLists.txt` — register `test_timeout`
 
-**Step 1: Add timeout phase to io_conn_t**
+**Step 1: Add timeout phase to ioh_conn_t**
 
-In `src/core/io_conn.h`, add a timeout phase enum and field to `io_conn_t`:
+In `src/core/ioh_conn.h`, add a timeout phase enum and field to `ioh_conn_t`:
 
 ```c
-/* After io_conn_state_t enum, before io_conn_t struct */
+/* After ioh_conn_state_t enum, before ioh_conn_t struct */
 typedef enum : uint8_t {
-    IO_TIMEOUT_NONE = 0,
-    IO_TIMEOUT_HEADER,    /**< waiting for complete request headers */
-    IO_TIMEOUT_BODY,      /**< waiting for Content-Length body */
-    IO_TIMEOUT_KEEPALIVE, /**< idle between pipelined requests */
-} io_timeout_phase_t;
+    IOH_TIMEOUT_NONE = 0,
+    IOH_TIMEOUT_HEADER,    /**< waiting for complete request headers */
+    IOH_TIMEOUT_BODY,      /**< waiting for Content-Length body */
+    IOH_TIMEOUT_KEEPALIVE, /**< idle between pipelined requests */
+} ioh_timeout_phase_t;
 ```
 
-Add to `io_conn_t` struct (after `tls_done` field):
+Add to `ioh_conn_t` struct (after `tls_done` field):
 
 ```c
-    io_timeout_phase_t timeout_phase; /**< current recv timeout phase */
+    ioh_timeout_phase_t timeout_phase; /**< current recv timeout phase */
 ```
 
 **Step 2: Modify arm_recv() to link a timeout SQE**
 
-In `src/core/io_server.c`, modify `arm_recv()` to accept a timeout_ms parameter and link a timeout:
+In `src/core/ioh_server.c`, modify `arm_recv()` to accept a timeout_ms parameter and link a timeout:
 
 ```c
-static int arm_recv(io_server_t *srv, io_conn_t *conn)
+static int arm_recv(ioh_server_t *srv, ioh_conn_t *conn)
 {
-    struct io_uring *ring = io_loop_ring(srv->loop);
+    struct io_uring *ring = ioh_loop_ring(srv->loop);
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
     if (sqe == nullptr) {
         return -ENOSPC;
@@ -86,21 +86,21 @@ static int arm_recv(io_server_t *srv, io_conn_t *conn)
 
     io_uring_prep_recv(sqe, conn->fd, conn->recv_buf + conn->recv_len,
                        conn->recv_buf_size - conn->recv_len, 0);
-    io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(conn->id, IO_OP_RECV));
+    io_uring_sqe_set_data64(sqe, IOH_ENCODE_USERDATA(conn->id, IOH_OP_RECV));
 
     /* Determine timeout based on phase */
     uint32_t timeout_ms = 0;
     switch (conn->timeout_phase) {
-    case IO_TIMEOUT_HEADER:
+    case IOH_TIMEOUT_HEADER:
         timeout_ms = srv->config.header_timeout_ms;
         break;
-    case IO_TIMEOUT_BODY:
+    case IOH_TIMEOUT_BODY:
         timeout_ms = srv->config.body_timeout_ms;
         break;
-    case IO_TIMEOUT_KEEPALIVE:
+    case IOH_TIMEOUT_KEEPALIVE:
         timeout_ms = srv->config.keepalive_timeout_ms;
         break;
-    case IO_TIMEOUT_NONE:
+    case IOH_TIMEOUT_NONE:
         break;
     }
 
@@ -119,7 +119,7 @@ static int arm_recv(io_server_t *srv, io_conn_t *conn)
             .tv_nsec = (long long)(timeout_ms % 1000) * 1000000LL,
         };
         io_uring_prep_link_timeout(tsqe, &ts, 0);
-        io_uring_sqe_set_data64(tsqe, IO_ENCODE_USERDATA(conn->id, IO_OP_TIMEOUT));
+        io_uring_sqe_set_data64(tsqe, IOH_ENCODE_USERDATA(conn->id, IOH_OP_TIMEOUT));
     }
 
     return 0;
@@ -128,38 +128,38 @@ static int arm_recv(io_server_t *srv, io_conn_t *conn)
 
 **Step 3: Set timeout phase on connection accept**
 
-In `io_server_run_once()` accept handler (after `io_conn_transition`), set initial phase:
+In `ioh_server_run_once()` accept handler (after `ioh_conn_transition`), set initial phase:
 
 ```c
-conn->timeout_phase = IO_TIMEOUT_HEADER;
+conn->timeout_phase = IOH_TIMEOUT_HEADER;
 ```
 
 **Step 4: Set timeout phase transitions in recv handler**
 
 After successful header parse when waiting for body (line ~598):
 ```c
-conn->timeout_phase = IO_TIMEOUT_BODY;
+conn->timeout_phase = IOH_TIMEOUT_BODY;
 ```
 
 After successful dispatch + send completion with keep_alive (send CQE handler, line ~669):
 ```c
-conn->timeout_phase = IO_TIMEOUT_KEEPALIVE;
+conn->timeout_phase = IOH_TIMEOUT_KEEPALIVE;
 conn->recv_len = 0;  /* reset recv buffer for next request */
 ```
 
 After TLS handshake complete:
 ```c
-conn->timeout_phase = IO_TIMEOUT_HEADER;
+conn->timeout_phase = IOH_TIMEOUT_HEADER;
 ```
 
-**Step 5: Add IO_OP_TIMEOUT CQE handler**
+**Step 5: Add IOH_OP_TIMEOUT CQE handler**
 
-In `io_server_run_once()`, add handler after the `IO_OP_CLOSE` block:
+In `ioh_server_run_once()`, add handler after the `IOH_OP_CLOSE` block:
 
 ```c
-} else if (op == IO_OP_TIMEOUT) {
-    uint32_t conn_id = (uint32_t)IO_DECODE_ID(ud);
-    io_conn_t *conn = find_conn_by_id(srv, conn_id);
+} else if (op == IOH_OP_TIMEOUT) {
+    uint32_t conn_id = (uint32_t)IOH_DECODE_ID(ud);
+    ioh_conn_t *conn = find_conn_by_id(srv, conn_id);
 
     if (conn == nullptr) {
         processed++;
@@ -179,7 +179,7 @@ In `io_server_run_once()`, add handler after the `IO_OP_CLOSE` block:
 
 **Step 6: Handle -ECANCELED on recv from linked timeout**
 
-In the `IO_OP_RECV` handler, the existing `cqe->res <= 0` check already handles this:
+In the `IOH_OP_RECV` handler, the existing `cqe->res <= 0` check already handles this:
 - `cqe->res == -ECANCELED` means the linked timeout expired and cancelled recv → `arm_close` is correct
 - `cqe->res == -ETIME` should not appear on recv (appears on timeout SQE)
 
@@ -187,32 +187,32 @@ No change needed — the existing `arm_close` on `cqe->res <= 0` already covers 
 
 **Step 7: Write unit tests**
 
-Add to `tests/unit/test_io_server.c`:
+Add to `tests/unit/test_ioh_server.c`:
 
 ```c
 void test_server_conn_timeout_phase_default(void)
 {
-    io_server_config_t cfg = make_config(19030, 16);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19030, 16);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
     int client_fd = connect_client(port);
     TEST_ASSERT_TRUE(client_fd >= 0);
 
-    int ret = io_server_run_once(srv, 1000);
+    int ret = ioh_server_run_once(srv, 1000);
     TEST_ASSERT_GREATER_THAN(0, ret);
 
     /* Verify connection was allocated with HEADER timeout phase */
-    io_conn_t *conn = io_conn_pool_get(io_server_pool(srv), 0);
+    ioh_conn_t *conn = ioh_conn_pool_get(ioh_server_pool(srv), 0);
     TEST_ASSERT_NOT_NULL(conn);
-    TEST_ASSERT_EQUAL_UINT8(IO_TIMEOUT_HEADER, conn->timeout_phase);
+    TEST_ASSERT_EQUAL_UINT8(IOH_TIMEOUT_HEADER, conn->timeout_phase);
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 ```
 
@@ -231,7 +231,7 @@ Create `tests/integration/test_timeout.c`:
  * @brief Integration tests for recv linked timeouts.
  */
 
-#include "core/io_server.h"
+#include "core/ioh_server.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -245,10 +245,10 @@ Create `tests/integration/test_timeout.c`:
 void setUp(void) {}
 void tearDown(void) {}
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -279,11 +279,11 @@ static int connect_client(uint16_t port)
 
 void test_header_timeout_closes_idle_connection(void)
 {
-    io_server_config_t cfg = make_config(19100);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19100);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -292,35 +292,35 @@ void test_header_timeout_closes_idle_connection(void)
     TEST_ASSERT_TRUE(client_fd >= 0);
 
     /* Process accept */
-    int ret = io_server_run_once(srv, 1000);
+    int ret = ioh_server_run_once(srv, 1000);
     TEST_ASSERT_GREATER_THAN(0, ret);
-    TEST_ASSERT_EQUAL_UINT32(1, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(1, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     /* Run loop until timeout fires (~500ms + some margin) */
     for (int i = 0; i < 20; i++) {
-        (void)io_server_run_once(srv, 100);
-        if (io_conn_pool_active(io_server_pool(srv)) == 0) {
+        (void)ioh_server_run_once(srv, 100);
+        if (ioh_conn_pool_active(ioh_server_pool(srv)) == 0) {
             break;
         }
     }
 
     /* Connection should have been closed by timeout */
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_keepalive_timeout_closes_after_response(void)
 {
-    io_server_config_t cfg = make_config(19101);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19101);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
     /* Set up a simple on_request handler */
-    (void)io_server_set_on_request(srv, nullptr, nullptr);
+    (void)ioh_server_set_on_request(srv, nullptr, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -333,7 +333,7 @@ void test_keepalive_timeout_closes_after_response(void)
 
     /* Process accept + recv + response */
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     /* Read server response */
@@ -342,16 +342,16 @@ void test_keepalive_timeout_closes_after_response(void)
 
     /* Now idle — keepalive timeout should fire after 500ms */
     for (int i = 0; i < 20; i++) {
-        (void)io_server_run_once(srv, 100);
-        if (io_conn_pool_active(io_server_pool(srv)) == 0) {
+        (void)ioh_server_run_once(srv, 100);
+        if (ioh_conn_pool_active(ioh_server_pool(srv)) == 0) {
             break;
         }
     }
 
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)
@@ -371,10 +371,10 @@ Add after the `test_shutdown` block:
     add_executable(test_timeout tests/integration/test_timeout.c)
     target_include_directories(test_timeout PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_timeout PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_middleware io_radix
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_middleware ioh_radix
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_timeout PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -389,7 +389,7 @@ cmake --preset clang-debug && cmake --build --preset clang-debug && ctest --pres
 ```
 
 ```bash
-git add src/core/io_conn.h src/core/io_server.c tests/unit/test_io_server.c tests/integration/test_timeout.c CMakeLists.txt
+git add src/core/ioh_conn.h src/core/ioh_server.c tests/unit/test_ioh_server.c tests/integration/test_timeout.c CMakeLists.txt
 git commit -m "feat(core): add linked timeouts for recv operations (header/body/keepalive)"
 ```
 
@@ -400,27 +400,27 @@ git commit -m "feat(core): add linked timeouts for recv operations (header/body/
 **Goal:** Validate Content-Length against `max_body_size` and accumulated header bytes against `max_header_size` in the recv→parse path. Return 413 (Content Too Large) or 431 (Request Header Fields Too Large) and close.
 
 **Files:**
-- Modify: `src/core/io_server.c` — add limit checks in recv handler
+- Modify: `src/core/ioh_server.c` — add limit checks in recv handler
 - Create: `tests/integration/test_limits.c` — limit enforcement tests
 - Modify: `CMakeLists.txt` — register `test_limits`
 
 **Step 1: Add header size check before parse**
 
-In `io_server_run_once()` recv handler, before `io_http1_parse_request()` (line ~591), add:
+In `ioh_server_run_once()` recv handler, before `ioh_http1_parse_request()` (line ~591), add:
 
 ```c
 /* Reject oversized headers (before parse — recv_len is header accumulation) */
 if (conn->recv_len > srv->config.max_header_size) {
-    io_response_t err_resp;
-    (void)io_response_init(&err_resp);
+    ioh_response_t err_resp;
+    (void)ioh_response_init(&err_resp);
     err_resp.status = 431;
-    (void)io_response_set_body(&err_resp, (const uint8_t *)"Request Header Fields Too Large", 31);
+    (void)ioh_response_set_body(&err_resp, (const uint8_t *)"Request Header Fields Too Large", 31);
     uint8_t resp_buf[512];
-    int resp_len = io_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
+    int resp_len = ioh_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
     if (resp_len > 0) {
         (void)arm_send(srv, conn, resp_buf, (size_t)resp_len);
     }
-    io_response_destroy(&err_resp);
+    ioh_response_destroy(&err_resp);
     conn->keep_alive = false;
     processed++;
     continue;
@@ -429,21 +429,21 @@ if (conn->recv_len > srv->config.max_header_size) {
 
 **Step 2: Add Content-Length validation after parse**
 
-After `io_http1_parse_request()` returns `consumed > 0`, before body wait (line ~598), add:
+After `ioh_http1_parse_request()` returns `consumed > 0`, before body wait (line ~598), add:
 
 ```c
 /* Reject oversized body */
 if (req.content_length > srv->config.max_body_size) {
-    io_response_t err_resp;
-    (void)io_response_init(&err_resp);
+    ioh_response_t err_resp;
+    (void)ioh_response_init(&err_resp);
     err_resp.status = 413;
-    (void)io_response_set_body(&err_resp, (const uint8_t *)"Content Too Large", 17);
+    (void)ioh_response_set_body(&err_resp, (const uint8_t *)"Content Too Large", 17);
     uint8_t resp_buf[512];
-    int resp_len = io_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
+    int resp_len = ioh_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
     if (resp_len > 0) {
         (void)arm_send(srv, conn, resp_buf, (size_t)resp_len);
     }
-    io_response_destroy(&err_resp);
+    ioh_response_destroy(&err_resp);
     conn->keep_alive = false;
     processed++;
     continue;
@@ -455,21 +455,21 @@ if (req.content_length > srv->config.max_body_size) {
 The pattern above repeats — extract a `send_error_response()` helper:
 
 ```c
-static void send_error_response(io_server_t *srv, io_conn_t *conn, uint16_t status,
+static void send_error_response(ioh_server_t *srv, ioh_conn_t *conn, uint16_t status,
                                 const char *msg)
 {
-    io_response_t err_resp;
-    (void)io_response_init(&err_resp);
+    ioh_response_t err_resp;
+    (void)ioh_response_init(&err_resp);
     err_resp.status = status;
     if (msg != nullptr) {
-        (void)io_response_set_body(&err_resp, (const uint8_t *)msg, strlen(msg));
+        (void)ioh_response_set_body(&err_resp, (const uint8_t *)msg, strlen(msg));
     }
     uint8_t resp_buf[512];
-    int resp_len = io_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
+    int resp_len = ioh_http1_serialize_response(&err_resp, resp_buf, sizeof(resp_buf));
     if (resp_len > 0) {
         (void)arm_send(srv, conn, resp_buf, (size_t)resp_len);
     }
-    io_response_destroy(&err_resp);
+    ioh_response_destroy(&err_resp);
     conn->keep_alive = false;
 }
 ```
@@ -486,7 +486,7 @@ Create `tests/integration/test_limits.c`:
  * @brief Integration tests for request limit enforcement.
  */
 
-#include "core/io_server.h"
+#include "core/ioh_server.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -500,10 +500,10 @@ Create `tests/integration/test_limits.c`:
 void setUp(void) {}
 void tearDown(void) {}
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -535,11 +535,11 @@ static int connect_client(uint16_t port)
 
 void test_oversized_header_returns_431(void)
 {
-    io_server_config_t cfg = make_config(19200);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19200);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -557,7 +557,7 @@ void test_oversized_header_returns_431(void)
     send(client_fd, big_req, (size_t)len, 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -565,16 +565,16 @@ void test_oversized_header_returns_431(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "431"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_oversized_body_returns_413(void)
 {
-    io_server_config_t cfg = make_config(19201);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19201);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -586,7 +586,7 @@ void test_oversized_body_returns_413(void)
     send(client_fd, req, strlen(req), 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -594,7 +594,7 @@ void test_oversized_body_returns_413(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "413"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)
@@ -617,7 +617,7 @@ cmake --build --preset clang-debug && ctest --preset clang-debug --output-on-fai
 ```
 
 ```bash
-git add src/core/io_server.c tests/integration/test_limits.c CMakeLists.txt
+git add src/core/ioh_server.c tests/integration/test_limits.c CMakeLists.txt
 git commit -m "feat(core): enforce request header size and body size limits (431/413)"
 ```
 
@@ -625,29 +625,29 @@ git commit -m "feat(core): enforce request header size and body size limits (431
 
 ## Task 3: Signal Handling via signalfd
 
-**Goal:** Create a signalfd for SIGTERM + SIGQUIT in `io_server_run()`, read it via io_uring multishot recv. SIGTERM → graceful drain. SIGQUIT → immediate shutdown.
+**Goal:** Create a signalfd for SIGTERM + SIGQUIT in `ioh_server_run()`, read it via io_uring multishot recv. SIGTERM → graceful drain. SIGQUIT → immediate shutdown.
 
 **Files:**
-- Modify: `src/core/io_server.c` — add signalfd setup in `io_server_run()`, `IO_OP_SIGNAL` handler
-- Modify: `src/core/io_server.h` — (no public API change)
+- Modify: `src/core/ioh_server.c` — add signalfd setup in `ioh_server_run()`, `IOH_OP_SIGNAL` handler
+- Modify: `src/core/ioh_server.h` — (no public API change)
 - Modify: internal struct — add `signal_fd` field
-- Modify: `tests/unit/test_io_server.c` — signal handling test
+- Modify: `tests/unit/test_ioh_server.c` — signal handling test
 - Create: `tests/integration/test_signal.c` — signal tests
 - Modify: `CMakeLists.txt` — register `test_signal`
 
 **Step 1: Add signal_fd to internal server struct**
 
-In `src/core/io_server.c`, add to `struct io_server`:
+In `src/core/ioh_server.c`, add to `struct ioh_server`:
 
 ```c
     int signal_fd; /**< signalfd for SIGTERM/SIGQUIT, -1 if not set up */
 ```
 
-Initialize to `-1` in `io_server_create()`. Close in `io_server_destroy()`.
+Initialize to `-1` in `ioh_server_create()`. Close in `ioh_server_destroy()`.
 
-**Step 2: Add signalfd setup in io_server_run()**
+**Step 2: Add signalfd setup in ioh_server_run()**
 
-Add `#include <sys/signalfd.h>` to io_server.c. Before the `while (!srv->stopped)` loop in `io_server_run()`:
+Add `#include <sys/signalfd.h>` to ioh_server.c. Before the `while (!srv->stopped)` loop in `ioh_server_run()`:
 
 ```c
 /* Block SIGTERM + SIGQUIT, redirect to signalfd */
@@ -660,12 +660,12 @@ sigprocmask(SIG_BLOCK, &mask, nullptr);
 srv->signal_fd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
 if (srv->signal_fd >= 0) {
     /* Arm recv on signalfd — we use a special conn_id of 0 (same as accept) */
-    struct io_uring *ring = io_loop_ring(srv->loop);
+    struct io_uring *ring = ioh_loop_ring(srv->loop);
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
     if (sqe != nullptr) {
         io_uring_prep_read(sqe, srv->signal_fd, &srv->siginfo_buf,
                            sizeof(srv->siginfo_buf), 0);
-        io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(0, IO_OP_SIGNAL));
+        io_uring_sqe_set_data64(sqe, IOH_ENCODE_USERDATA(0, IOH_OP_SIGNAL));
     }
 }
 ```
@@ -675,18 +675,18 @@ Add `siginfo_buf` to struct:
     struct signalfd_siginfo siginfo_buf; /**< signal read buffer */
 ```
 
-**Step 3: Add IO_OP_SIGNAL CQE handler**
+**Step 3: Add IOH_OP_SIGNAL CQE handler**
 
-In `io_server_run_once()`, add handler:
+In `ioh_server_run_once()`, add handler:
 
 ```c
-} else if (op == IO_OP_SIGNAL) {
+} else if (op == IOH_OP_SIGNAL) {
     if (cqe->res > 0) {
         uint32_t signo = srv->siginfo_buf.ssi_signo;
         if (signo == SIGTERM) {
-            (void)io_server_shutdown(srv, IO_SHUTDOWN_DRAIN);
+            (void)ioh_server_shutdown(srv, IOH_SHUTDOWN_DRAIN);
         } else if (signo == SIGQUIT) {
-            (void)io_server_shutdown(srv, IO_SHUTDOWN_IMMEDIATE);
+            (void)ioh_server_shutdown(srv, IOH_SHUTDOWN_IMMEDIATE);
         }
     }
     /* Re-arm signal read if not stopped */
@@ -695,7 +695,7 @@ In `io_server_run_once()`, add handler:
         if (sqe != nullptr) {
             io_uring_prep_read(sqe, srv->signal_fd, &srv->siginfo_buf,
                                sizeof(srv->siginfo_buf), 0);
-            io_uring_sqe_set_data64(sqe, IO_ENCODE_USERDATA(0, IO_OP_SIGNAL));
+            io_uring_sqe_set_data64(sqe, IOH_ENCODE_USERDATA(0, IOH_OP_SIGNAL));
         }
     }
 }
@@ -703,7 +703,7 @@ In `io_server_run_once()`, add handler:
 
 **Step 4: Close signalfd on destroy**
 
-In `io_server_destroy()`:
+In `ioh_server_destroy()`:
 ```c
 if (srv->signal_fd >= 0) {
     close(srv->signal_fd);
@@ -713,7 +713,7 @@ if (srv->signal_fd >= 0) {
 
 **Step 5: Restore signal mask on shutdown**
 
-After the `while` loop in `io_server_run()`:
+After the `while` loop in `ioh_server_run()`:
 ```c
 /* Restore signal handling */
 if (srv->signal_fd >= 0) {
@@ -733,7 +733,7 @@ Create `tests/integration/test_signal.c`:
  * @brief Integration tests for signal-based shutdown.
  */
 
-#include "core/io_server.h"
+#include "core/ioh_server.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -749,10 +749,10 @@ Create `tests/integration/test_signal.c`:
 void setUp(void) {}
 void tearDown(void) {}
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -770,8 +770,8 @@ static void *send_signal_thread(void *arg)
 
 void test_sigterm_triggers_graceful_shutdown(void)
 {
-    io_server_config_t cfg = make_config(19300);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19300);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
     /* Schedule SIGTERM after 200ms */
@@ -779,12 +779,12 @@ void test_sigterm_triggers_graceful_shutdown(void)
     pthread_t thr;
     pthread_create(&thr, nullptr, send_signal_thread, &delay);
 
-    /* io_server_run() should return after signal */
-    int ret = io_server_run(srv);
+    /* ioh_server_run() should return after signal */
+    int ret = ioh_server_run(srv);
     TEST_ASSERT_EQUAL_INT(0, ret);
 
     pthread_join(thr, nullptr);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)
@@ -803,10 +803,10 @@ Add `test_signal` block with `-lpthread` link:
     add_executable(test_signal tests/integration/test_signal.c)
     target_include_directories(test_signal PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_signal PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_middleware io_radix
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_middleware ioh_radix
+        ioh_route_group ioh_route_inspect ioh_route_meta
         pthread
     )
     target_compile_options(test_signal PRIVATE
@@ -822,7 +822,7 @@ cmake --build --preset clang-debug && ctest --preset clang-debug --output-on-fai
 ```
 
 ```bash
-git add src/core/io_server.c tests/integration/test_signal.c CMakeLists.txt
+git add src/core/ioh_server.c tests/integration/test_signal.c CMakeLists.txt
 git commit -m "feat(core): add signalfd-based SIGTERM/SIGQUIT shutdown handling"
 ```
 
@@ -830,22 +830,22 @@ git commit -m "feat(core): add signalfd-based SIGTERM/SIGQUIT shutdown handling"
 
 ## Task 4: Structured Logging Module
 
-**Goal:** Create `io_log.h` + `io_log.c` with level-filtered logging, custom sink callback, and default stderr output. Integrate into the server pipeline (accept, error, timeout, shutdown).
+**Goal:** Create `ioh_log.h` + `ioh_log.c` with level-filtered logging, custom sink callback, and default stderr output. Integrate into the server pipeline (accept, error, timeout, shutdown).
 
 **Files:**
-- Create: `src/core/io_log.h` — logging API
-- Create: `src/core/io_log.c` — logging implementation
-- Create: `tests/unit/test_io_log.c` — logging unit tests
-- Modify: `src/core/io_server.c` — add log calls at key pipeline points
-- Modify: `CMakeLists.txt` — add `io_log` library + test
+- Create: `src/core/ioh_log.h` — logging API
+- Create: `src/core/ioh_log.c` — logging implementation
+- Create: `tests/unit/test_ioh_log.c` — logging unit tests
+- Modify: `src/core/ioh_server.c` — add log calls at key pipeline points
+- Modify: `CMakeLists.txt` — add `ioh_log` library + test
 
-**Step 1: Create io_log.h**
+**Step 1: Create ioh_log.h**
 
-Create `src/core/io_log.h`:
+Create `src/core/ioh_log.h`:
 
 ```c
 /**
- * @file io_log.h
+ * @file ioh_log.h
  * @brief Structured logging with level filtering and custom sinks.
  */
 
@@ -859,11 +859,11 @@ Create `src/core/io_log.h`:
 /* ---- Log levels ---- */
 
 typedef enum : uint8_t {
-    IO_LOG_ERROR = 0,
-    IO_LOG_WARN = 1,
-    IO_LOG_INFO = 2,
-    IO_LOG_DEBUG = 3,
-} io_log_level_t;
+    IOH_LOG_ERROR = 0,
+    IOH_LOG_WARN = 1,
+    IOH_LOG_INFO = 2,
+    IOH_LOG_DEBUG = 3,
+} ioh_log_level_t;
 
 /* ---- Log sink callback ---- */
 
@@ -872,30 +872,30 @@ typedef enum : uint8_t {
  * @param level    Log level.
  * @param module   Module name (e.g. "server", "tls").
  * @param message  Formatted message.
- * @param user_data Opaque data from io_log_set_sink().
+ * @param user_data Opaque data from ioh_log_set_sink().
  */
-typedef void (*io_log_sink_fn)(io_log_level_t level, const char *module, const char *message,
+typedef void (*ioh_log_sink_fn)(ioh_log_level_t level, const char *module, const char *message,
                                void *user_data);
 
 /* ---- Configuration ---- */
 
 /**
  * @brief Set the minimum log level (messages below are suppressed).
- * @param level Minimum level to emit (default IO_LOG_INFO).
+ * @param level Minimum level to emit (default IOH_LOG_INFO).
  */
-void io_log_set_level(io_log_level_t level);
+void ioh_log_set_level(ioh_log_level_t level);
 
 /**
  * @brief Get the current minimum log level.
  */
-io_log_level_t io_log_get_level(void);
+ioh_log_level_t ioh_log_get_level(void);
 
 /**
  * @brief Set a custom log sink (replaces default stderr sink).
  * @param sink     Sink function (nullptr restores default).
  * @param user_data Opaque data passed to sink.
  */
-void io_log_set_sink(io_log_sink_fn sink, void *user_data);
+void ioh_log_set_sink(ioh_log_sink_fn sink, void *user_data);
 
 /* ---- Logging functions ---- */
 
@@ -905,7 +905,7 @@ void io_log_set_sink(io_log_sink_fn sink, void *user_data);
  * @param module Module name.
  * @param fmt    Printf format string.
  */
-void io_log(io_log_level_t level, const char *module, const char *fmt, ...)
+void ioh_log(ioh_log_level_t level, const char *module, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 
 /**
@@ -913,31 +913,31 @@ void io_log(io_log_level_t level, const char *module, const char *fmt, ...)
  * @param level Log level.
  * @return Static string ("ERROR", "WARN", "INFO", "DEBUG").
  */
-const char *io_log_level_name(io_log_level_t level);
+const char *ioh_log_level_name(ioh_log_level_t level);
 
 /* ---- Convenience macros ---- */
 
-#define IO_LOG_ERROR(mod, ...) io_log(IO_LOG_ERROR, (mod), __VA_ARGS__)
-#define IO_LOG_WARN(mod, ...) io_log(IO_LOG_WARN, (mod), __VA_ARGS__)
-#define IO_LOG_INFO(mod, ...) io_log(IO_LOG_INFO, (mod), __VA_ARGS__)
-#define IO_LOG_DEBUG(mod, ...) io_log(IO_LOG_DEBUG, (mod), __VA_ARGS__)
+#define IOH_LOG_ERROR(mod, ...) ioh_log(IOH_LOG_ERROR, (mod), __VA_ARGS__)
+#define IOH_LOG_WARN(mod, ...) ioh_log(IOH_LOG_WARN, (mod), __VA_ARGS__)
+#define IOH_LOG_INFO(mod, ...) ioh_log(IOH_LOG_INFO, (mod), __VA_ARGS__)
+#define IOH_LOG_DEBUG(mod, ...) ioh_log(IOH_LOG_DEBUG, (mod), __VA_ARGS__)
 
 #endif /* IOHTTP_CORE_LOG_H */
 ```
 
-**Step 2: Create io_log.c**
+**Step 2: Create ioh_log.c**
 
-Create `src/core/io_log.c`:
+Create `src/core/ioh_log.c`:
 
 ```c
 /**
- * @file io_log.c
+ * @file ioh_log.c
  * @brief Structured logging implementation.
  */
 
 #define _GNU_SOURCE
 
-#include "core/io_log.h"
+#include "core/ioh_log.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -945,32 +945,32 @@ Create `src/core/io_log.c`:
 
 /* ---- Global state ---- */
 
-static io_log_level_t g_min_level = IO_LOG_INFO;
-static io_log_sink_fn g_sink = nullptr;
+static ioh_log_level_t g_min_level = IOH_LOG_INFO;
+static ioh_log_sink_fn g_sink = nullptr;
 static void *g_sink_data = nullptr;
 
 /* ---- Level names ---- */
 
 static const char *const level_names[] = {
-    [IO_LOG_ERROR] = "ERROR",
-    [IO_LOG_WARN] = "WARN",
-    [IO_LOG_INFO] = "INFO",
-    [IO_LOG_DEBUG] = "DEBUG",
+    [IOH_LOG_ERROR] = "ERROR",
+    [IOH_LOG_WARN] = "WARN",
+    [IOH_LOG_INFO] = "INFO",
+    [IOH_LOG_DEBUG] = "DEBUG",
 };
 
 /* ---- Configuration ---- */
 
-void io_log_set_level(io_log_level_t level)
+void ioh_log_set_level(ioh_log_level_t level)
 {
     g_min_level = level;
 }
 
-io_log_level_t io_log_get_level(void)
+ioh_log_level_t ioh_log_get_level(void)
 {
     return g_min_level;
 }
 
-void io_log_set_sink(io_log_sink_fn sink, void *user_data)
+void ioh_log_set_sink(ioh_log_sink_fn sink, void *user_data)
 {
     g_sink = sink;
     g_sink_data = user_data;
@@ -978,7 +978,7 @@ void io_log_set_sink(io_log_sink_fn sink, void *user_data)
 
 /* ---- Default stderr sink ---- */
 
-static void default_sink(io_log_level_t level, const char *module, const char *message,
+static void default_sink(ioh_log_level_t level, const char *module, const char *message,
                           void *user_data)
 {
     (void)user_data;
@@ -997,15 +997,15 @@ static void default_sink(io_log_level_t level, const char *module, const char *m
 
 /* ---- Core logging ---- */
 
-const char *io_log_level_name(io_log_level_t level)
+const char *ioh_log_level_name(ioh_log_level_t level)
 {
-    if (level > IO_LOG_DEBUG) {
+    if (level > IOH_LOG_DEBUG) {
         return "UNKNOWN";
     }
     return level_names[level];
 }
 
-void io_log(io_log_level_t level, const char *module, const char *fmt, ...)
+void ioh_log(ioh_log_level_t level, const char *module, const char *fmt, ...)
 {
     if (level > g_min_level) {
         return;
@@ -1020,22 +1020,22 @@ void io_log(io_log_level_t level, const char *module, const char *fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    io_log_sink_fn sink = (g_sink != nullptr) ? g_sink : default_sink;
+    ioh_log_sink_fn sink = (g_sink != nullptr) ? g_sink : default_sink;
     sink(level, module, buf, g_sink_data);
 }
 ```
 
 **Step 3: Write unit tests**
 
-Create `tests/unit/test_io_log.c`:
+Create `tests/unit/test_ioh_log.c`:
 
 ```c
 /**
- * @file test_io_log.c
+ * @file test_ioh_log.c
  * @brief Unit tests for structured logging module.
  */
 
-#include "core/io_log.h"
+#include "core/ioh_log.h"
 
 #include <string.h>
 #include <unity.h>
@@ -1044,10 +1044,10 @@ Create `tests/unit/test_io_log.c`:
 
 static char last_module[64];
 static char last_message[1024];
-static io_log_level_t last_level;
+static ioh_log_level_t last_level;
 static int sink_call_count;
 
-static void test_sink(io_log_level_t level, const char *module, const char *message,
+static void test_sink(ioh_log_level_t level, const char *module, const char *message,
                       void *user_data)
 {
     (void)user_data;
@@ -1061,70 +1061,70 @@ void setUp(void)
 {
     memset(last_module, 0, sizeof(last_module));
     memset(last_message, 0, sizeof(last_message));
-    last_level = IO_LOG_DEBUG;
+    last_level = IOH_LOG_DEBUG;
     sink_call_count = 0;
-    io_log_set_level(IO_LOG_DEBUG);
-    io_log_set_sink(test_sink, nullptr);
+    ioh_log_set_level(IOH_LOG_DEBUG);
+    ioh_log_set_sink(test_sink, nullptr);
 }
 
 void tearDown(void)
 {
-    io_log_set_sink(nullptr, nullptr);
-    io_log_set_level(IO_LOG_INFO);
+    ioh_log_set_sink(nullptr, nullptr);
+    ioh_log_set_level(IOH_LOG_INFO);
 }
 
 void test_log_basic_message(void)
 {
-    io_log(IO_LOG_INFO, "server", "listening on port %d", 8080);
-    TEST_ASSERT_EQUAL_UINT8(IO_LOG_INFO, last_level);
+    ioh_log(IOH_LOG_INFO, "server", "listening on port %d", 8080);
+    TEST_ASSERT_EQUAL_UINT8(IOH_LOG_INFO, last_level);
     TEST_ASSERT_EQUAL_STRING("server", last_module);
     TEST_ASSERT_EQUAL_STRING("listening on port 8080", last_message);
 }
 
 void test_log_level_filtering(void)
 {
-    io_log_set_level(IO_LOG_WARN);
-    io_log(IO_LOG_DEBUG, "server", "should be filtered");
+    ioh_log_set_level(IOH_LOG_WARN);
+    ioh_log(IOH_LOG_DEBUG, "server", "should be filtered");
     TEST_ASSERT_EQUAL_INT(0, sink_call_count);
 
-    io_log(IO_LOG_INFO, "server", "also filtered");
+    ioh_log(IOH_LOG_INFO, "server", "also filtered");
     TEST_ASSERT_EQUAL_INT(0, sink_call_count);
 
-    io_log(IO_LOG_WARN, "server", "passes filter");
+    ioh_log(IOH_LOG_WARN, "server", "passes filter");
     TEST_ASSERT_EQUAL_INT(1, sink_call_count);
 
-    io_log(IO_LOG_ERROR, "server", "also passes");
+    ioh_log(IOH_LOG_ERROR, "server", "also passes");
     TEST_ASSERT_EQUAL_INT(2, sink_call_count);
 }
 
 void test_log_level_names(void)
 {
-    TEST_ASSERT_EQUAL_STRING("ERROR", io_log_level_name(IO_LOG_ERROR));
-    TEST_ASSERT_EQUAL_STRING("WARN", io_log_level_name(IO_LOG_WARN));
-    TEST_ASSERT_EQUAL_STRING("INFO", io_log_level_name(IO_LOG_INFO));
-    TEST_ASSERT_EQUAL_STRING("DEBUG", io_log_level_name(IO_LOG_DEBUG));
+    TEST_ASSERT_EQUAL_STRING("ERROR", ioh_log_level_name(IOH_LOG_ERROR));
+    TEST_ASSERT_EQUAL_STRING("WARN", ioh_log_level_name(IOH_LOG_WARN));
+    TEST_ASSERT_EQUAL_STRING("INFO", ioh_log_level_name(IOH_LOG_INFO));
+    TEST_ASSERT_EQUAL_STRING("DEBUG", ioh_log_level_name(IOH_LOG_DEBUG));
 }
 
 void test_log_convenience_macros(void)
 {
-    IO_LOG_ERROR("tls", "handshake failed: %s", "timeout");
-    TEST_ASSERT_EQUAL_UINT8(IO_LOG_ERROR, last_level);
+    IOH_LOG_ERROR("tls", "handshake failed: %s", "timeout");
+    TEST_ASSERT_EQUAL_UINT8(IOH_LOG_ERROR, last_level);
     TEST_ASSERT_EQUAL_STRING("tls", last_module);
     TEST_ASSERT_EQUAL_STRING("handshake failed: timeout", last_message);
 }
 
 void test_log_get_set_level(void)
 {
-    io_log_set_level(IO_LOG_ERROR);
-    TEST_ASSERT_EQUAL_UINT8(IO_LOG_ERROR, io_log_get_level());
+    ioh_log_set_level(IOH_LOG_ERROR);
+    TEST_ASSERT_EQUAL_UINT8(IOH_LOG_ERROR, ioh_log_get_level());
 }
 
 void test_log_null_inputs(void)
 {
-    io_log(IO_LOG_INFO, nullptr, "test");
+    ioh_log(IOH_LOG_INFO, nullptr, "test");
     TEST_ASSERT_EQUAL_INT(0, sink_call_count);
 
-    io_log(IO_LOG_INFO, "mod", nullptr);
+    ioh_log(IOH_LOG_INFO, "mod", nullptr);
     TEST_ASSERT_EQUAL_INT(0, sink_call_count);
 }
 
@@ -1141,55 +1141,55 @@ int main(void)
 }
 ```
 
-**Step 4: Register io_log library and test in CMakeLists.txt**
+**Step 4: Register ioh_log library and test in CMakeLists.txt**
 
-Add after the `io_buffer` library block:
+Add after the `ioh_buffer` library block:
 
 ```cmake
 # ============================================================================
 # Structured logging
 # ============================================================================
 
-add_library(io_log STATIC src/core/io_log.c)
-target_include_directories(io_log PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_log STATIC src/core/ioh_log.c)
+target_include_directories(ioh_log PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_log tests/unit/test_io_log.c io_log)
+ioh_add_test(test_ioh_log tests/unit/test_ioh_log.c ioh_log)
 ```
 
-Add `io_log` to `io_server` link:
+Add `ioh_log` to `ioh_server` link:
 ```cmake
-target_link_libraries(io_server PUBLIC io_loop io_conn io_ctx io_http1 io_request io_response io_router io_middleware io_tls io_log)
+target_link_libraries(ioh_server PUBLIC ioh_loop ioh_conn ioh_ctx ioh_http1 ioh_request ioh_response ioh_router ioh_middleware ioh_tls ioh_log)
 ```
 
-**Step 5: Integrate logging into io_server.c**
+**Step 5: Integrate logging into ioh_server.c**
 
-Add `#include "core/io_log.h"` to includes. Add log calls at key points:
+Add `#include "core/ioh_log.h"` to includes. Add log calls at key points:
 
 ```c
-/* In io_server_listen() on success: */
-IO_LOG_INFO("server", "listening on %s:%u (fd=%d)", srv->config.listen_addr,
+/* In ioh_server_listen() on success: */
+IOH_LOG_INFO("server", "listening on %s:%u (fd=%d)", srv->config.listen_addr,
             srv->config.listen_port, fd);
 
 /* In accept handler on pool full: */
-IO_LOG_WARN("server", "connection pool full, rejecting fd=%d", client_fd);
+IOH_LOG_WARN("server", "connection pool full, rejecting fd=%d", client_fd);
 
 /* In recv handler on timeout close: */
-IO_LOG_DEBUG("server", "conn %u: timeout (%s), closing",
-             conn->id, conn->timeout_phase == IO_TIMEOUT_HEADER ? "header" :
-             conn->timeout_phase == IO_TIMEOUT_KEEPALIVE ? "keepalive" : "body");
+IOH_LOG_DEBUG("server", "conn %u: timeout (%s), closing",
+             conn->id, conn->timeout_phase == IOH_TIMEOUT_HEADER ? "header" :
+             conn->timeout_phase == IOH_TIMEOUT_KEEPALIVE ? "keepalive" : "body");
 
 /* In recv handler on 431/413: */
-IO_LOG_WARN("server", "conn %u: header too large (%zu > %u), returning 431",
+IOH_LOG_WARN("server", "conn %u: header too large (%zu > %u), returning 431",
             conn->id, conn->recv_len, srv->config.max_header_size);
 
 /* In signal handler: */
-IO_LOG_INFO("server", "received signal %u, initiating %s shutdown",
+IOH_LOG_INFO("server", "received signal %u, initiating %s shutdown",
             signo, signo == SIGTERM ? "drain" : "immediate");
 
-/* In io_server_shutdown(): */
-IO_LOG_INFO("server", "shutdown mode=%s, active=%u connections",
-            mode == IO_SHUTDOWN_DRAIN ? "drain" : "immediate",
-            io_conn_pool_active(srv->pool));
+/* In ioh_server_shutdown(): */
+IOH_LOG_INFO("server", "shutdown mode=%s, active=%u connections",
+            mode == IOH_SHUTDOWN_DRAIN ? "drain" : "immediate",
+            ioh_conn_pool_active(srv->pool));
 ```
 
 **Step 6: Build, test, commit**
@@ -1199,7 +1199,7 @@ cmake --build --preset clang-debug && ctest --preset clang-debug --output-on-fai
 ```
 
 ```bash
-git add src/core/io_log.h src/core/io_log.c tests/unit/test_io_log.c src/core/io_server.c CMakeLists.txt
+git add src/core/ioh_log.h src/core/ioh_log.c tests/unit/test_ioh_log.c src/core/ioh_server.c CMakeLists.txt
 git commit -m "feat(core): add structured logging module with level filtering and custom sinks"
 ```
 
@@ -1207,33 +1207,33 @@ git commit -m "feat(core): add structured logging module with level filtering an
 
 ## Task 5: Request ID Generation
 
-**Goal:** Generate a 128-bit hex request ID for every dispatched request. Store in `io_ctx_t`, add `X-Request-Id` response header. Propagate incoming `X-Request-Id` if present.
+**Goal:** Generate a 128-bit hex request ID for every dispatched request. Store in `ioh_ctx_t`, add `X-Request-Id` response header. Propagate incoming `X-Request-Id` if present.
 
 **Files:**
-- Modify: `src/core/io_server.c` — generate request ID in `dispatch_request()`
+- Modify: `src/core/ioh_server.c` — generate request ID in `dispatch_request()`
 - Create: `tests/integration/test_request_id.c` — request ID tests
 - Modify: `CMakeLists.txt` — register `test_request_id`
 
 **Step 1: Generate request ID in dispatch_request()**
 
-In `src/core/io_server.c`, add `dispatch_request()` request ID generation after `io_ctx_init()`:
+In `src/core/ioh_server.c`, add `dispatch_request()` request ID generation after `ioh_ctx_init()`:
 
 ```c
 /* Generate or propagate request ID */
-const char *incoming_id = io_request_header(req, "X-Request-Id");
+const char *incoming_id = ioh_request_header(req, "X-Request-Id");
 if (incoming_id != nullptr) {
-    (void)io_ctx_set(&ctx, "request_id", (void *)incoming_id);
-    (void)io_response_set_header(&resp, "X-Request-Id", incoming_id);
+    (void)ioh_ctx_set(&ctx, "request_id", (void *)incoming_id);
+    (void)ioh_response_set_header(&resp, "X-Request-Id", incoming_id);
 } else {
     /* Generate 128-bit hex ID using arc4random */
     uint32_t r1 = arc4random();
     uint32_t r2 = arc4random();
     uint32_t r3 = arc4random();
     uint32_t r4 = arc4random();
-    char *rid = io_ctx_sprintf(&ctx, "%08x%08x%08x%08x", r1, r2, r3, r4);
+    char *rid = ioh_ctx_sprintf(&ctx, "%08x%08x%08x%08x", r1, r2, r3, r4);
     if (rid != nullptr) {
-        (void)io_ctx_set(&ctx, "request_id", rid);
-        (void)io_response_set_header(&resp, "X-Request-Id", rid);
+        (void)ioh_ctx_set(&ctx, "request_id", rid);
+        (void)ioh_response_set_header(&resp, "X-Request-Id", rid);
     }
 }
 ```
@@ -1250,8 +1250,8 @@ Create `tests/integration/test_request_id.c`:
  * @brief Integration tests for X-Request-Id generation and propagation.
  */
 
-#include "core/io_server.h"
-#include "router/io_router.h"
+#include "core/ioh_server.h"
+#include "router/ioh_router.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -1265,10 +1265,10 @@ Create `tests/integration/test_request_id.c`:
 void setUp(void) {}
 void tearDown(void) {}
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -1297,28 +1297,28 @@ static int connect_and_send(uint16_t port, const char *req)
     return fd;
 }
 
-static int dummy_handler(io_ctx_t *c)
+static int dummy_handler(ioh_ctx_t *c)
 {
-    return io_ctx_text(c, 200, "OK");
+    return ioh_ctx_text(c, 200, "OK");
 }
 
 void test_response_contains_generated_request_id(void)
 {
-    io_server_config_t cfg = make_config(19400);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19400);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *r = io_router_create();
-    (void)io_router_add(r, IO_METHOD_GET, "/", dummy_handler);
-    (void)io_server_set_router(srv, r);
+    ioh_router_t *r = ioh_router_create();
+    (void)ioh_router_add(r, IOH_METHOD_GET, "/", dummy_handler);
+    (void)ioh_server_set_router(srv, r);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(fd);
 
     int client_fd = connect_and_send(port, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -1338,28 +1338,28 @@ void test_response_contains_generated_request_id(void)
     TEST_ASSERT_EQUAL_INT(32, hex_count);
 
     close(client_fd);
-    io_router_destroy(r);
-    io_server_destroy(srv);
+    ioh_router_destroy(r);
+    ioh_server_destroy(srv);
 }
 
 void test_propagates_incoming_request_id(void)
 {
-    io_server_config_t cfg = make_config(19401);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19401);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *r = io_router_create();
-    (void)io_router_add(r, IO_METHOD_GET, "/", dummy_handler);
-    (void)io_server_set_router(srv, r);
+    ioh_router_t *r = ioh_router_create();
+    (void)ioh_router_add(r, IOH_METHOD_GET, "/", dummy_handler);
+    (void)ioh_server_set_router(srv, r);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(fd);
 
     int client_fd = connect_and_send(port,
         "GET / HTTP/1.1\r\nHost: localhost\r\nX-Request-Id: abc123\r\n\r\n");
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -1369,8 +1369,8 @@ void test_propagates_incoming_request_id(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "X-Request-Id: abc123"));
 
     close(client_fd);
-    io_router_destroy(r);
-    io_server_destroy(srv);
+    ioh_router_destroy(r);
+    ioh_server_destroy(srv);
 }
 
 int main(void)
@@ -1393,7 +1393,7 @@ cmake --build --preset clang-debug && ctest --preset clang-debug --output-on-fai
 ```
 
 ```bash
-git add src/core/io_server.c tests/integration/test_request_id.c CMakeLists.txt
+git add src/core/ioh_server.c tests/integration/test_request_id.c CMakeLists.txt
 git commit -m "feat(core): generate X-Request-Id header with 128-bit hex ID"
 ```
 
@@ -1401,19 +1401,19 @@ git commit -m "feat(core): generate X-Request-Id header with 128-bit hex ID"
 
 ## Task 6: PROXY Protocol Pipeline Integration
 
-**Goal:** Wire `io_proxy_decode()` into the accept→recv flow. When `config.proxy_protocol == true`, transition to `IO_CONN_PROXY_HEADER` after accept, parse the PROXY header on first recv, extract addresses, then proceed to TLS/HTTP.
+**Goal:** Wire `ioh_proxy_decode()` into the accept→recv flow. When `config.proxy_protocol == true`, transition to `IOH_CONN_PROXY_HEADER` after accept, parse the PROXY header on first recv, extract addresses, then proceed to TLS/HTTP.
 
 **Reference:** https://www.haproxy.org/download/3.4/doc/proxy-protocol.txt
 
 **Files:**
-- Modify: `src/core/io_server.c` — add PROXY protocol state handling in accept + recv
-- Modify: `src/core/io_conn.h` — add `proxy_bytes_received` counter
+- Modify: `src/core/ioh_server.c` — add PROXY protocol state handling in accept + recv
+- Modify: `src/core/ioh_conn.h` — add `proxy_bytes_received` counter
 - Create: `tests/integration/test_proxy_pipeline.c` — PROXY protocol integration tests
-- Modify: `CMakeLists.txt` — register `test_proxy_pipeline`, link `io_proxy_proto`
+- Modify: `CMakeLists.txt` — register `test_proxy_pipeline`, link `ioh_proxy_proto`
 
-**Step 1: Add proxy tracking field to io_conn_t**
+**Step 1: Add proxy tracking field to ioh_conn_t**
 
-In `src/core/io_conn.h`, add to `io_conn_t`:
+In `src/core/ioh_conn.h`, add to `ioh_conn_t`:
 
 ```c
     size_t proxy_bytes_received; /**< bytes received during PROXY_HEADER phase */
@@ -1421,33 +1421,33 @@ In `src/core/io_conn.h`, add to `io_conn_t`:
 
 **Step 2: Modify accept handler for PROXY protocol**
 
-In `io_server_run_once()` accept handler, change the state transition:
+In `ioh_server_run_once()` accept handler, change the state transition:
 
 ```c
 if (srv->config.proxy_protocol) {
-    (void)io_conn_transition(conn, IO_CONN_PROXY_HEADER);
-    conn->timeout_phase = IO_TIMEOUT_HEADER;
+    (void)ioh_conn_transition(conn, IOH_CONN_PROXY_HEADER);
+    conn->timeout_phase = IOH_TIMEOUT_HEADER;
     conn->proxy_bytes_received = 0;
 } else if (srv->tls_ctx != nullptr) {
-    conn->tls_ctx = io_tls_conn_create(srv->tls_ctx, client_fd);
+    conn->tls_ctx = ioh_tls_conn_create(srv->tls_ctx, client_fd);
     conn->tls_done = false;
-    (void)io_conn_transition(conn, IO_CONN_TLS_HANDSHAKE);
-    conn->timeout_phase = IO_TIMEOUT_HEADER;
+    (void)ioh_conn_transition(conn, IOH_CONN_TLS_HANDSHAKE);
+    conn->timeout_phase = IOH_TIMEOUT_HEADER;
 } else {
-    (void)io_conn_transition(conn, IO_CONN_HTTP_ACTIVE);
-    conn->timeout_phase = IO_TIMEOUT_HEADER;
+    (void)ioh_conn_transition(conn, IOH_CONN_HTTP_ACTIVE);
+    conn->timeout_phase = IOH_TIMEOUT_HEADER;
 }
 ```
 
 **Step 3: Add PROXY header parsing in recv handler**
 
-In the `IO_OP_RECV` handler, after `conn->recv_len += (size_t)cqe->res;`, add a PROXY_HEADER state check before the TLS path:
+In the `IOH_OP_RECV` handler, after `conn->recv_len += (size_t)cqe->res;`, add a PROXY_HEADER state check before the TLS path:
 
 ```c
 /* ---- PROXY protocol path ---- */
-if (conn->state == IO_CONN_PROXY_HEADER) {
-    io_proxy_result_t proxy_result;
-    int proxy_ret = io_proxy_decode(conn->recv_buf, conn->recv_len, &proxy_result);
+if (conn->state == IOH_CONN_PROXY_HEADER) {
+    ioh_proxy_result_t proxy_result;
+    int proxy_ret = ioh_proxy_decode(conn->recv_buf, conn->recv_len, &proxy_result);
 
     if (proxy_ret > 0) {
         /* PROXY header decoded — store addresses */
@@ -1462,17 +1462,17 @@ if (conn->state == IO_CONN_PROXY_HEADER) {
         }
         conn->recv_len = remaining;
 
-        IO_LOG_DEBUG("server", "conn %u: PROXY v%u from %s",
+        IOH_LOG_DEBUG("server", "conn %u: PROXY v%u from %s",
                      conn->id, proxy_result.version,
                      proxy_result.is_local ? "LOCAL" : "remote");
 
         /* Transition to next state */
         if (srv->tls_ctx != nullptr) {
-            conn->tls_ctx = io_tls_conn_create(srv->tls_ctx, conn->fd);
+            conn->tls_ctx = ioh_tls_conn_create(srv->tls_ctx, conn->fd);
             conn->tls_done = false;
-            (void)io_conn_transition(conn, IO_CONN_TLS_HANDSHAKE);
+            (void)ioh_conn_transition(conn, IOH_CONN_TLS_HANDSHAKE);
         } else {
-            (void)io_conn_transition(conn, IO_CONN_HTTP_ACTIVE);
+            (void)ioh_conn_transition(conn, IOH_CONN_HTTP_ACTIVE);
         }
 
         /* If there's remaining data after PROXY header, re-process */
@@ -1490,7 +1490,7 @@ if (conn->state == IO_CONN_PROXY_HEADER) {
         continue;
     } else {
         /* Malformed PROXY header — close */
-        IO_LOG_WARN("server", "conn %u: malformed PROXY header, closing", conn->id);
+        IOH_LOG_WARN("server", "conn %u: malformed PROXY header, closing", conn->id);
         (void)arm_close(srv, conn);
         processed++;
         continue;
@@ -1498,11 +1498,11 @@ if (conn->state == IO_CONN_PROXY_HEADER) {
 }
 ```
 
-**Step 4: Add io_proxy_proto.h include**
+**Step 4: Add ioh_proxy_proto.h include**
 
-In `io_server.c`, add:
+In `ioh_server.c`, add:
 ```c
-#include "http/io_proxy_proto.h"
+#include "http/ioh_proxy_proto.h"
 ```
 
 **Step 5: Write integration tests**
@@ -1515,7 +1515,7 @@ Create `tests/integration/test_proxy_pipeline.c`:
  * @brief Integration tests for PROXY protocol in the server pipeline.
  */
 
-#include "core/io_server.h"
+#include "core/ioh_server.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -1529,10 +1529,10 @@ Create `tests/integration/test_proxy_pipeline.c`:
 void setUp(void) {}
 void tearDown(void) {}
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -1561,20 +1561,20 @@ static int connect_client(uint16_t port)
     return fd;
 }
 
-static int on_request_echo(io_ctx_t *c, void *user_data)
+static int on_request_echo(ioh_ctx_t *c, void *user_data)
 {
     (void)user_data;
-    return io_ctx_text(c, 200, "OK");
+    return ioh_ctx_text(c, 200, "OK");
 }
 
 void test_proxy_v1_tcp4_pipeline(void)
 {
-    io_server_config_t cfg = make_config(19500);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19500);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -1589,7 +1589,7 @@ void test_proxy_v1_tcp4_pipeline(void)
     send(client_fd, http_req, strlen(http_req), 0);
 
     for (int i = 0; i < 15; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -1599,17 +1599,17 @@ void test_proxy_v1_tcp4_pipeline(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "200"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_proxy_invalid_header_closes_connection(void)
 {
-    io_server_config_t cfg = make_config(19501);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19501);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -1621,25 +1621,25 @@ void test_proxy_invalid_header_closes_connection(void)
     send(client_fd, garbage, strlen(garbage), 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     /* Connection should be closed */
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_non_proxy_listener_ignores_proxy_headers(void)
 {
-    io_server_config_t cfg = make_config(19502);
+    ioh_server_config_t cfg = make_config(19502);
     cfg.proxy_protocol = false;  /* NOT a PROXY listener */
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -1651,7 +1651,7 @@ void test_non_proxy_listener_ignores_proxy_headers(void)
     send(client_fd, http_req, strlen(http_req), 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -1659,7 +1659,7 @@ void test_non_proxy_listener_ignores_proxy_headers(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "200"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)
@@ -1674,17 +1674,17 @@ int main(void)
 
 **Step 6: Register test in CMakeLists.txt**
 
-Add `test_proxy_pipeline` block, including `io_proxy_proto` in link libraries:
+Add `test_proxy_pipeline` block, including `ioh_proxy_proto` in link libraries:
 
 ```cmake
     add_executable(test_proxy_pipeline tests/integration/test_proxy_pipeline.c)
     target_include_directories(test_proxy_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_proxy_pipeline PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_middleware io_radix
-        io_route_group io_route_inspect io_route_meta
-        io_proxy_proto io_log
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_middleware ioh_radix
+        ioh_route_group ioh_route_inspect ioh_route_meta
+        ioh_proxy_proto ioh_log
     )
     target_compile_options(test_proxy_pipeline PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -1692,10 +1692,10 @@ Add `test_proxy_pipeline` block, including `io_proxy_proto` in link libraries:
     add_test(NAME test_proxy_pipeline COMMAND test_proxy_pipeline)
 ```
 
-Also add `io_proxy_proto` and `io_log` to `io_server` link libraries in CMakeLists.txt:
+Also add `ioh_proxy_proto` and `ioh_log` to `ioh_server` link libraries in CMakeLists.txt:
 
 ```cmake
-target_link_libraries(io_server PUBLIC io_loop io_conn io_ctx io_http1 io_request io_response io_router io_middleware io_tls io_log io_proxy_proto)
+target_link_libraries(ioh_server PUBLIC ioh_loop ioh_conn ioh_ctx ioh_http1 ioh_request ioh_response ioh_router ioh_middleware ioh_tls ioh_log ioh_proxy_proto)
 ```
 
 **Step 7: Build, test, commit**
@@ -1705,7 +1705,7 @@ cmake --build --preset clang-debug && ctest --preset clang-debug --output-on-fai
 ```
 
 ```bash
-git add src/core/io_server.c src/core/io_conn.h tests/integration/test_proxy_pipeline.c CMakeLists.txt
+git add src/core/ioh_server.c src/core/ioh_conn.h tests/integration/test_proxy_pipeline.c CMakeLists.txt
 git commit -m "feat(core): wire PROXY protocol v1/v2 into accept→recv pipeline"
 ```
 
@@ -1760,7 +1760,7 @@ git add -u && git commit -m "fix(quality): resolve Sprint 12 static analysis fin
 | 1 | Linked timeouts (header/body/keepalive) | 1 unit + 2 integration |
 | 2 | Request limits (431/413) | 2 integration |
 | 3 | signalfd (SIGTERM/SIGQUIT) | 1 integration |
-| 4 | Structured logging (`io_log`) | 6 unit |
+| 4 | Structured logging (`ioh_log`) | 6 unit |
 | 5 | Request ID (`X-Request-Id`) | 2 integration |
 | 6 | PROXY protocol pipeline | 3 integration |
 | 7 | Quality pipeline pass | — |

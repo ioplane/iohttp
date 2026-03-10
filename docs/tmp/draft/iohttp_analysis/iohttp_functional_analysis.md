@@ -215,7 +215,7 @@
 ### 4.1 Текущий API (из описания)
 
 ```c
-io_server_config_t cfg = {
+ioh_server_config_t cfg = {
     .listen_addr   = "0.0.0.0",
     .listen_port   = 8080,
     .tls_cert      = "/path/to/cert.pem",
@@ -248,7 +248,7 @@ io_server_config_t cfg = {
 ```
 ❌ Нет builder pattern для конфигурации
 ❌ Нет fluent API для роутинга
-❌ Нет макросов для упрощения (IO_ROUTE_GET, etc.)
+❌ Нет макросов для упрощения (IOH_ROUTE_GET, etc.)
 ❌ Нет встроенного JSON response helper
 ❌ Нет template engine integration
 ❌ Нет dependency injection
@@ -259,17 +259,17 @@ io_server_config_t cfg = {
 
 ```c
 // Текущий подход
-io_router_get(router, "/api/users/:id", handler, NULL);
+ioh_router_get(router, "/api/users/:id", handler, NULL);
 
 // Рекомендуемый fluent API
-IO_ROUTE(router)
+IOH_ROUTE(router)
     .get("/api/users/:id", get_user_handler)
     .post("/api/users", create_user_handler)
     .middleware(auth_middleware)
     .group("/api", api_routes);
 
 // Builder для конфигурации
-io_server_t* server = io_server_builder()
+ioh_server_t* server = ioh_server_builder()
     .listen("0.0.0.0", 8080)
     .tls("/path/to/cert.pem", "/path/to/key.pem")
     .max_connections(256)

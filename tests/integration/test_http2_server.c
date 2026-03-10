@@ -4,15 +4,15 @@
  *
  * Verifies the full path: TLS handshake with ALPN negotiation -> protocol
  * dispatch -> HTTP/2 or HTTP/1.1 request processing. Uses buffer-based TLS
- * (no sockets) with a wolfSSL client and io_tls server.
+ * (no sockets) with a wolfSSL client and ioh_tls server.
  */
 
-#include "core/io_ctx.h"
-#include "http/io_http1.h"
-#include "http/io_http2.h"
-#include "http/io_request.h"
-#include "http/io_response.h"
-#include "tls/io_tls.h"
+#include "core/ioh_ctx.h"
+#include "http/ioh_http1.h"
+#include "http/ioh_http2.h"
+#include "http/ioh_request.h"
+#include "http/ioh_response.h"
+#include "tls/ioh_tls.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -54,16 +54,16 @@ static void init_cert_paths(void)
 /* ---- Protocol selection ---- */
 
 typedef enum : uint8_t {
-    IO_PROTO_HTTP11 = 0,
-    IO_PROTO_H2,
-} io_protocol_t;
+    IOH_PROTO_HTTP11 = 0,
+    IOH_PROTO_H2,
+} ioh_protocol_t;
 
-static io_protocol_t io_protocol_from_alpn(const char *alpn)
+static ioh_protocol_t ioh_protocol_from_alpn(const char *alpn)
 {
     if (alpn != nullptr && strcmp(alpn, "h2") == 0) {
-        return IO_PROTO_H2;
+        return IOH_PROTO_H2;
     }
-    return IO_PROTO_HTTP11;
+    return IOH_PROTO_HTTP11;
 }
 
 /* ---- Client-side TLS state (buffer-based, same pattern as test_tls_uring.c) ---- */
@@ -71,10 +71,10 @@ static io_protocol_t io_protocol_from_alpn(const char *alpn)
 typedef struct {
     WOLFSSL_CTX *ctx;
     WOLFSSL *ssl;
-    uint8_t cipher_in_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_in_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_in_len;
     size_t cipher_in_pos;
-    uint8_t cipher_out_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_out_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_out_len;
 } test_tls_client_t;
 
@@ -107,7 +107,7 @@ static int client_send_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx)
     (void)ssl;
     test_tls_client_t *client = ctx;
 
-    size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
+    size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
     if (space == 0) {
         return WOLFSSL_CBIO_ERR_WANT_WRITE;
     }
@@ -189,32 +189,32 @@ static void client_destroy(test_tls_client_t *client)
 
 /* ---- Shuttle: transfer ciphertext between server and client ---- */
 
-static void shuttle_data(io_tls_conn_t *server, test_tls_client_t *client)
+static void shuttle_data(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     /* Server output -> client input */
     const uint8_t *sout;
     size_t slen;
-    (void)io_tls_get_output(server, &sout, &slen);
+    (void)ioh_tls_get_output(server, &sout, &slen);
     if (slen > 0) {
-        size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
+        size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
         size_t copy = slen < space ? slen : space;
         if (copy > 0) {
             memcpy(client->cipher_in_buf + client->cipher_in_len, sout, copy);
             client->cipher_in_len += copy;
-            io_tls_consume_output(server, copy);
+            ioh_tls_consume_output(server, copy);
         }
     }
 
     /* Client output -> server input */
     if (client->cipher_out_len > 0) {
-        (void)io_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
+        (void)ioh_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
         client->cipher_out_len = 0;
     }
 }
 
 /* ---- Handshake helper ---- */
 
-static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client)
+static bool do_buffer_handshake(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     bool server_done = false;
     bool client_done = false;
@@ -223,7 +223,7 @@ static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client
         shuttle_data(server, client);
 
         if (!server_done) {
-            int ret = io_tls_handshake(server);
+            int ret = ioh_tls_handshake(server);
             if (ret == 0) {
                 server_done = true;
             } else if (ret != -EAGAIN) {
@@ -258,7 +258,7 @@ static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client
 /* ---- HTTP/2 callback context ---- */
 
 typedef struct {
-    io_request_t last_req;
+    ioh_request_t last_req;
     int32_t last_stream_id;
     int request_count;
     bool has_response;
@@ -271,7 +271,7 @@ typedef struct {
     uint8_t body_copy[4096];
 } h2_test_ctx_t;
 
-static int h2_on_request_cb(io_ctx_t *c, int32_t stream_id, void *user_data)
+static int h2_on_request_cb(ioh_ctx_t *c, int32_t stream_id, void *user_data)
 {
     h2_test_ctx_t *ctx = user_data;
     ctx->last_req = *c->req;
@@ -296,7 +296,7 @@ static int h2_on_request_cb(io_ctx_t *c, int32_t stream_id, void *user_data)
     }
 
     if (ctx->has_response) {
-        (void)io_respond(c->resp, ctx->resp_status, ctx->resp_content_type, ctx->resp_body,
+        (void)ioh_respond(c->resp, ctx->resp_status, ctx->resp_content_type, ctx->resp_body,
                          ctx->resp_body_len);
     }
     return 0;
@@ -316,16 +316,16 @@ void tearDown(void)
 
 void test_alpn_selects_h2(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     cfg.alpn = "h2,http/1.1";
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     /* Client requests h2 via ALPN */
@@ -336,33 +336,33 @@ void test_alpn_selects_h2(void)
     TEST_ASSERT_TRUE_MESSAGE(ok, "TLS handshake with h2 ALPN failed");
 
     /* Verify ALPN negotiated h2 */
-    const char *alpn = io_tls_get_alpn(sconn);
+    const char *alpn = ioh_tls_get_alpn(sconn);
     TEST_ASSERT_NOT_NULL_MESSAGE(alpn, "ALPN should be negotiated after handshake");
     TEST_ASSERT_EQUAL_STRING("h2", alpn);
 
     /* Protocol selection should pick H2 */
-    io_protocol_t proto = io_protocol_from_alpn(alpn);
-    TEST_ASSERT_EQUAL_INT(IO_PROTO_H2, proto);
+    ioh_protocol_t proto = ioh_protocol_from_alpn(alpn);
+    TEST_ASSERT_EQUAL_INT(IOH_PROTO_H2, proto);
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ==== Test 2: ALPN selects http/1.1 ==== */
 
 void test_alpn_selects_http11(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     cfg.alpn = "h2,http/1.1";
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     /* Client requests only http/1.1 via ALPN */
@@ -373,17 +373,17 @@ void test_alpn_selects_http11(void)
     TEST_ASSERT_TRUE_MESSAGE(ok, "TLS handshake with http/1.1 ALPN failed");
 
     /* Verify ALPN negotiated http/1.1 */
-    const char *alpn = io_tls_get_alpn(sconn);
+    const char *alpn = ioh_tls_get_alpn(sconn);
     TEST_ASSERT_NOT_NULL_MESSAGE(alpn, "ALPN should be negotiated after handshake");
     TEST_ASSERT_EQUAL_STRING("http/1.1", alpn);
 
     /* Protocol selection should pick HTTP/1.1 */
-    io_protocol_t proto = io_protocol_from_alpn(alpn);
-    TEST_ASSERT_EQUAL_INT(IO_PROTO_HTTP11, proto);
+    ioh_protocol_t proto = ioh_protocol_from_alpn(alpn);
+    TEST_ASSERT_EQUAL_INT(IOH_PROTO_HTTP11, proto);
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ==== Test 3: No ALPN defaults to HTTP/1.1 ==== */
@@ -392,16 +392,16 @@ void test_alpn_default_http11(void)
 {
     /* Server configured WITHOUT ALPN — simulates a server that
      * does not advertise protocols. */
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     /* cfg.alpn = nullptr (default) */
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     /* Client also does NOT set ALPN */
@@ -412,16 +412,16 @@ void test_alpn_default_http11(void)
     TEST_ASSERT_TRUE_MESSAGE(ok, "TLS handshake without ALPN failed");
 
     /* No ALPN should be negotiated */
-    const char *alpn = io_tls_get_alpn(sconn);
+    const char *alpn = ioh_tls_get_alpn(sconn);
     TEST_ASSERT_NULL_MESSAGE(alpn, "ALPN should be nullptr when not negotiated");
 
     /* Protocol selection should default to HTTP/1.1 */
-    io_protocol_t proto = io_protocol_from_alpn(alpn);
-    TEST_ASSERT_EQUAL_INT(IO_PROTO_HTTP11, proto);
+    ioh_protocol_t proto = ioh_protocol_from_alpn(alpn);
+    TEST_ASSERT_EQUAL_INT(IOH_PROTO_HTTP11, proto);
 
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- nghttp2 client helper for h2 tests ---- */
@@ -480,15 +480,15 @@ static int32_t ng_client_submit_get(nghttp2_session *ng_client, const char *path
 }
 
 /**
- * Full round-trip for nghttp2 client <-> io_http2 server, through TLS.
+ * Full round-trip for nghttp2 client <-> ioh_http2 server, through TLS.
  *
  * 1. nghttp2 client produces HTTP/2 frames into ng_out
  * 2. wolfSSL client encrypts ng_out -> shuttle to server
- * 3. io_tls server decrypts -> io_http2_on_recv
- * 4. io_http2_flush -> io_tls server encrypts -> shuttle to client
+ * 3. ioh_tls server decrypts -> ioh_http2_on_recv
+ * 4. ioh_http2_flush -> ioh_tls server encrypts -> shuttle to client
  * 5. wolfSSL client decrypts -> nghttp2 client consumes response frames
  */
-static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
+static int h2_tls_pump(ioh_http2_session_t *h2_server, ioh_tls_conn_t *sconn,
                        test_tls_client_t *client, nghttp2_session *ng_client, ng_buf_t *ng_out)
 {
     /* Step 1: nghttp2 client -> TLS client -> TLS server -> HTTP/2 server */
@@ -516,11 +516,11 @@ static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
         /* Server decrypts and feeds to HTTP/2 */
         uint8_t plain_buf[16384];
         for (;;) {
-            int rret = io_tls_read(sconn, plain_buf, sizeof(plain_buf));
+            int rret = ioh_tls_read(sconn, plain_buf, sizeof(plain_buf));
             if (rret <= 0) {
                 break;
             }
-            ssize_t consumed = io_http2_on_recv(h2_server, plain_buf, (size_t)rret);
+            ssize_t consumed = ioh_http2_on_recv(h2_server, plain_buf, (size_t)rret);
             if (consumed < 0) {
                 return (int)consumed;
             }
@@ -530,7 +530,7 @@ static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
     /* Step 2: HTTP/2 server -> TLS server -> TLS client -> nghttp2 client */
     const uint8_t *h2_out;
     size_t h2_out_len;
-    int rv = io_http2_flush(h2_server, &h2_out, &h2_out_len);
+    int rv = ioh_http2_flush(h2_server, &h2_out, &h2_out_len);
     if (rv != 0) {
         return rv;
     }
@@ -539,7 +539,7 @@ static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
         /* Server encrypts with TLS */
         size_t total_written = 0;
         while (total_written < h2_out_len) {
-            int wret = io_tls_write(sconn, h2_out + total_written, h2_out_len - total_written);
+            int wret = ioh_tls_write(sconn, h2_out + total_written, h2_out_len - total_written);
             if (wret == -EAGAIN) {
                 shuttle_data(sconn, client);
                 continue;
@@ -575,16 +575,16 @@ static int h2_tls_pump(io_http2_session_t *h2_server, io_tls_conn_t *sconn,
 void test_http2_full_request_via_tls(void)
 {
     /* Server: TLS with ALPN h2 + HTTP/2 session */
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     cfg.alpn = "h2,http/1.1";
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     /* Client: TLS with h2 ALPN */
@@ -595,7 +595,7 @@ void test_http2_full_request_via_tls(void)
     TEST_ASSERT_TRUE_MESSAGE(ok, "TLS handshake failed");
 
     /* Verify ALPN */
-    const char *alpn = io_tls_get_alpn(sconn);
+    const char *alpn = ioh_tls_get_alpn(sconn);
     TEST_ASSERT_NOT_NULL(alpn);
     TEST_ASSERT_EQUAL_STRING("h2", alpn);
 
@@ -608,7 +608,7 @@ void test_http2_full_request_via_tls(void)
                            .resp_body = (const uint8_t *)body,
                            .resp_body_len = strlen(body)};
 
-    io_http2_session_t *h2_server = io_http2_session_create(nullptr, h2_on_request_cb, &h2ctx);
+    ioh_http2_session_t *h2_server = ioh_http2_session_create(nullptr, h2_on_request_cb, &h2ctx);
     TEST_ASSERT_NOT_NULL(h2_server);
 
     /* nghttp2 client session */
@@ -643,32 +643,32 @@ void test_http2_full_request_via_tls(void)
 
     /* Verify the server received the request */
     TEST_ASSERT_EQUAL_INT(1, h2ctx.request_count);
-    TEST_ASSERT_EQUAL_INT(IO_METHOD_GET, h2ctx.last_req.method);
+    TEST_ASSERT_EQUAL_INT(IOH_METHOD_GET, h2ctx.last_req.method);
     TEST_ASSERT_EQUAL_INT(6, (int)h2ctx.last_req.path_len);
     TEST_ASSERT_EQUAL_INT(0, memcmp(h2ctx.last_req.path, "/hello", 6));
     TEST_ASSERT_EQUAL_UINT8(2, h2ctx.last_req.http_version_major);
 
     nghttp2_session_del(ng_client);
-    io_http2_session_destroy(h2_server);
+    ioh_http2_session_destroy(h2_server);
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ==== Test 5: Multiple HTTP/2 streams via TLS ==== */
 
 void test_http2_multiple_streams_via_tls(void)
 {
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
     cfg.alpn = "h2,http/1.1";
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create("h2");
@@ -677,10 +677,10 @@ void test_http2_multiple_streams_via_tls(void)
     bool ok = do_buffer_handshake(sconn, client);
     TEST_ASSERT_TRUE(ok);
 
-    TEST_ASSERT_EQUAL_STRING("h2", io_tls_get_alpn(sconn));
+    TEST_ASSERT_EQUAL_STRING("h2", ioh_tls_get_alpn(sconn));
 
     /* HTTP/2 session — response data is stored in the test context and copied
-     * into each per-stream io_ctx_t response by the callback. */
+     * into each per-stream ioh_ctx_t response by the callback. */
     h2_test_ctx_t h2ctx = {.request_count = 0,
                            .has_response = true,
                            .resp_status = 200,
@@ -688,7 +688,7 @@ void test_http2_multiple_streams_via_tls(void)
                            .resp_body = (const uint8_t *)"OK",
                            .resp_body_len = 2};
 
-    io_http2_session_t *h2_server = io_http2_session_create(nullptr, h2_on_request_cb, &h2ctx);
+    ioh_http2_session_t *h2_server = ioh_http2_session_create(nullptr, h2_on_request_cb, &h2ctx);
     TEST_ASSERT_NOT_NULL(h2_server);
 
     ng_buf_t ng_out = {.len = 0};
@@ -728,10 +728,10 @@ void test_http2_multiple_streams_via_tls(void)
     TEST_ASSERT_EQUAL_INT(3, h2ctx.request_count);
 
     nghttp2_session_del(ng_client);
-    io_http2_session_destroy(h2_server);
+    ioh_http2_session_destroy(h2_server);
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ==== Test 6: Server push (skipped — phased out by browsers) ==== */

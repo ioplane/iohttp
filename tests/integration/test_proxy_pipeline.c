@@ -3,8 +3,8 @@
  * @brief Integration tests for PROXY protocol in the server pipeline.
  */
 
-#include "core/io_ctx.h"
-#include "core/io_server.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -22,10 +22,10 @@ void tearDown(void)
 {
 }
 
-static io_server_config_t make_config(uint16_t port)
+static ioh_server_config_t make_config(uint16_t port)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_addr = "127.0.0.1";
     cfg.listen_port = port;
     cfg.max_connections = 16;
@@ -60,20 +60,20 @@ static int connect_client(uint16_t port)
     return fd;
 }
 
-static int on_request_echo(io_ctx_t *c, void *user_data)
+static int on_request_echo(ioh_ctx_t *c, void *user_data)
 {
     (void)user_data;
-    return io_ctx_text(c, 200, "OK");
+    return ioh_ctx_text(c, 200, "OK");
 }
 
 void test_proxy_v1_tcp4_pipeline(void)
 {
-    io_server_config_t cfg = make_config(19500);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19500);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -88,7 +88,7 @@ void test_proxy_v1_tcp4_pipeline(void)
     send(client_fd, http_req, strlen(http_req), 0);
 
     for (int i = 0; i < 15; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -98,17 +98,17 @@ void test_proxy_v1_tcp4_pipeline(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "200"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_proxy_invalid_header_closes_connection(void)
 {
-    io_server_config_t cfg = make_config(19501);
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_config_t cfg = make_config(19501);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -120,25 +120,25 @@ void test_proxy_invalid_header_closes_connection(void)
     send(client_fd, garbage, strlen(garbage), 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     /* Connection should be closed */
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 void test_non_proxy_listener_ignores_proxy_headers(void)
 {
-    io_server_config_t cfg = make_config(19502);
+    ioh_server_config_t cfg = make_config(19502);
     cfg.proxy_protocol = false; /* NOT a PROXY listener */
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    (void)io_server_set_on_request(srv, on_request_echo, nullptr);
+    (void)ioh_server_set_on_request(srv, on_request_echo, nullptr);
 
-    int fd = io_server_listen(srv);
+    int fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, fd);
     uint16_t port = get_bound_port(fd);
 
@@ -150,7 +150,7 @@ void test_non_proxy_listener_ignores_proxy_headers(void)
     send(client_fd, http_req, strlen(http_req), 0);
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 200);
+        (void)ioh_server_run_once(srv, 200);
     }
 
     char resp[4096] = {0};
@@ -158,7 +158,7 @@ void test_non_proxy_listener_ignores_proxy_headers(void)
     TEST_ASSERT_NOT_NULL(strstr(resp, "200"));
 
     close(client_fd);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)

@@ -3,10 +3,10 @@
  * @brief End-to-end TLS pipeline test using wolfSSL client.
  */
 
-#include "core/io_ctx.h"
-#include "core/io_server.h"
-#include "router/io_router.h"
-#include "tls/io_tls.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
+#include "router/ioh_router.h"
+#include "tls/ioh_tls.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -45,9 +45,9 @@ static uint16_t next_tls_port = 19080;
 
 /* ---- Handler ---- */
 
-static int hello_handler(io_ctx_t *c)
+static int hello_handler(ioh_ctx_t *c)
 {
-    return io_ctx_text(c, 200, "TLS Hello");
+    return ioh_ctx_text(c, 200, "TLS Hello");
 }
 
 /* ---- Test: TLS GET ---- */
@@ -64,31 +64,31 @@ void test_tls_pipeline_get(void)
     }
 
     /* Server TLS context */
-    io_tls_config_t tls_cfg;
-    io_tls_config_init(&tls_cfg);
+    ioh_tls_config_t tls_cfg;
+    ioh_tls_config_init(&tls_cfg);
     tls_cfg.cert_file = cert_path;
     tls_cfg.key_file = key_path;
 
-    io_tls_ctx_t *tls_ctx = io_tls_ctx_create(&tls_cfg);
+    ioh_tls_ctx_t *tls_ctx = ioh_tls_ctx_create(&tls_cfg);
     TEST_ASSERT_NOT_NULL(tls_ctx);
 
     /* Server */
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = next_tls_port++;
     cfg.max_connections = 16;
     cfg.queue_depth = 64;
 
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_tls(srv, tls_ctx));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_tls(srv, tls_ctx));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -124,7 +124,7 @@ void test_tls_pipeline_get(void)
         if (ret == WOLFSSL_SUCCESS) {
             connected = true;
         }
-        (void)io_server_run_once(srv, 50);
+        (void)ioh_server_run_once(srv, 50);
     }
 
     if (connected) {
@@ -135,7 +135,7 @@ void test_tls_pipeline_get(void)
         wolfSSL_write(ssl, req, (int)strlen(req));
 
         for (int i = 0; i < 20; i++) {
-            (void)io_server_run_once(srv, 50);
+            (void)ioh_server_run_once(srv, 50);
         }
 
         char resp[4096];
@@ -152,9 +152,9 @@ void test_tls_pipeline_get(void)
     wolfSSL_free(ssl);
     wolfSSL_CTX_free(client_ctx);
     close(client_fd);
-    io_server_destroy(srv);
-    io_router_destroy(router);
-    io_tls_ctx_destroy(tls_ctx);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
+    ioh_tls_ctx_destroy(tls_ctx);
 }
 
 int main(void)

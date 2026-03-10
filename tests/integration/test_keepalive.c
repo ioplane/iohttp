@@ -3,10 +3,10 @@
  * @brief Integration tests for HTTP/1.1 keep-alive connection reuse.
  */
 
-#include "core/io_conn.h"
-#include "core/io_ctx.h"
-#include "core/io_server.h"
-#include "router/io_router.h"
+#include "core/ioh_conn.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
+#include "router/ioh_router.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -85,38 +85,38 @@ static ssize_t recv_response(int fd, char *buf, size_t cap)
 
 /* ---- Handlers ---- */
 
-static int hello_handler(io_ctx_t *c)
+static int hello_handler(ioh_ctx_t *c)
 {
-    return io_ctx_text(c, 200, "OK");
+    return ioh_ctx_text(c, 200, "OK");
 }
 
 /* ---- Test helpers ---- */
 
 static uint16_t next_port = 19080;
 
-static io_server_t *make_server(void)
+static ioh_server_t *make_server(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = next_port++;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
-    return io_server_create(&cfg);
+    return ioh_server_create(&cfg);
 }
 
 /* ---- Test 1: Two requests on same connection ---- */
 
 void test_keepalive_two_requests(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -130,7 +130,7 @@ void test_keepalive_two_requests(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req1, strlen(req1)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -147,7 +147,7 @@ void test_keepalive_two_requests(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req2, strlen(req2)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     resp_len = recv_response(client, resp, sizeof(resp));
@@ -156,23 +156,23 @@ void test_keepalive_two_requests(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "OK", 2));
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 2: Connection: close closes after first request ---- */
 
 void test_keepalive_connection_close(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -187,7 +187,7 @@ void test_keepalive_connection_close(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -197,15 +197,15 @@ void test_keepalive_connection_close(void)
 
     /* Run more iterations to process close */
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     /* Verify pool has 0 active connections */
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 int main(void)

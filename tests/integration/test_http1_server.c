@@ -7,11 +7,11 @@
  * and PROXY protocol + HTTP chaining.
  */
 
-#include "http/io_http1.h"
-#include "http/io_proxy_proto.h"
-#include "http/io_request.h"
-#include "http/io_response.h"
-#include "tls/io_tls.h"
+#include "http/ioh_http1.h"
+#include "http/ioh_proxy_proto.h"
+#include "http/ioh_request.h"
+#include "http/ioh_response.h"
+#include "tls/ioh_tls.h"
 
 #include <errno.h>
 #include <string.h>
@@ -82,25 +82,25 @@ void test_http1_full_request_response(void)
                       "Host: localhost\r\n"
                       "\r\n";
 
-    io_request_t req;
-    int consumed = io_http1_parse_request((const uint8_t *)raw, strlen(raw), &req);
+    ioh_request_t req;
+    int consumed = ioh_http1_parse_request((const uint8_t *)raw, strlen(raw), &req);
     TEST_ASSERT_GREATER_THAN(0, consumed);
-    TEST_ASSERT_EQUAL(IO_METHOD_GET, req.method);
+    TEST_ASSERT_EQUAL(IOH_METHOD_GET, req.method);
     TEST_ASSERT_EQUAL_STRING_LEN("/api/health", req.path, req.path_len);
     TEST_ASSERT_NOT_NULL(req.host);
     TEST_ASSERT_TRUE(req.keep_alive);
 
     /* Build JSON response */
-    io_response_t resp;
-    int rc = io_response_init(&resp);
+    ioh_response_t resp;
+    int rc = ioh_response_init(&resp);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_respond_json(&resp, 200, "{\"status\":\"ok\"}");
+    rc = ioh_respond_json(&resp, 200, "{\"status\":\"ok\"}");
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     /* Serialize */
     uint8_t out[4096];
-    int slen = io_http1_serialize_response(&resp, out, sizeof(out));
+    int slen = ioh_http1_serialize_response(&resp, out, sizeof(out));
     TEST_ASSERT_GREATER_THAN(0, slen);
 
     /* Verify serialized output */
@@ -108,7 +108,7 @@ void test_http1_full_request_response(void)
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, "Content-Type: application/json"));
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, "{\"status\":\"ok\"}"));
 
-    io_response_destroy(&resp);
+    ioh_response_destroy(&resp);
 }
 
 /* ---- Test 2: Keep-alive with multiple sequential requests ---- */
@@ -124,11 +124,11 @@ void test_http1_keepalive_multiple(void)
     size_t expected_lens[] = {9, 9, 11};
 
     for (int i = 0; i < 3; i++) {
-        io_request_t req;
+        ioh_request_t req;
         int consumed =
-            io_http1_parse_request((const uint8_t *)requests[i], strlen(requests[i]), &req);
+            ioh_http1_parse_request((const uint8_t *)requests[i], strlen(requests[i]), &req);
         TEST_ASSERT_GREATER_THAN(0, consumed);
-        TEST_ASSERT_EQUAL(IO_METHOD_GET, req.method);
+        TEST_ASSERT_EQUAL(IOH_METHOD_GET, req.method);
         TEST_ASSERT_EQUAL_size_t(expected_lens[i], req.path_len);
         TEST_ASSERT_EQUAL_STRING_LEN(expected_paths[i], req.path, req.path_len);
         TEST_ASSERT_TRUE_MESSAGE(req.keep_alive, "HTTP/1.1 should default keep-alive");
@@ -144,31 +144,31 @@ void test_http1_connection_close(void)
                       "Connection: close\r\n"
                       "\r\n";
 
-    io_request_t req;
-    int consumed = io_http1_parse_request((const uint8_t *)raw, strlen(raw), &req);
+    ioh_request_t req;
+    int consumed = ioh_http1_parse_request((const uint8_t *)raw, strlen(raw), &req);
     TEST_ASSERT_GREATER_THAN(0, consumed);
-    TEST_ASSERT_EQUAL(IO_METHOD_GET, req.method);
+    TEST_ASSERT_EQUAL(IOH_METHOD_GET, req.method);
     TEST_ASSERT_FALSE_MESSAGE(req.keep_alive, "Connection: close must set keep_alive=false");
 
     /* Build response with Connection: close */
-    io_response_t resp;
-    int rc = io_response_init(&resp);
+    ioh_response_t resp;
+    int rc = ioh_response_init(&resp);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_respond(&resp, 200, "text/plain", (const uint8_t *)"bye", 3);
+    rc = ioh_respond(&resp, 200, "text/plain", (const uint8_t *)"bye", 3);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_response_set_header(&resp, "Connection", "close");
+    rc = ioh_response_set_header(&resp, "Connection", "close");
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     uint8_t out[4096];
-    int slen = io_http1_serialize_response(&resp, out, sizeof(out));
+    int slen = ioh_http1_serialize_response(&resp, out, sizeof(out));
     TEST_ASSERT_GREATER_THAN(0, slen);
 
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, "Connection: close"));
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, "bye"));
 
-    io_response_destroy(&resp);
+    ioh_response_destroy(&resp);
 }
 
 /* ---- Test 4: POST with body ---- */
@@ -187,10 +187,10 @@ void test_http1_post_with_body(void)
                           strlen(body), body);
     TEST_ASSERT_GREATER_THAN(0, rawlen);
 
-    io_request_t req;
-    int consumed = io_http1_parse_request((const uint8_t *)raw, (size_t)rawlen, &req);
+    ioh_request_t req;
+    int consumed = ioh_http1_parse_request((const uint8_t *)raw, (size_t)rawlen, &req);
     TEST_ASSERT_GREATER_THAN(0, consumed);
-    TEST_ASSERT_EQUAL(IO_METHOD_POST, req.method);
+    TEST_ASSERT_EQUAL(IOH_METHOD_POST, req.method);
     TEST_ASSERT_EQUAL_STRING_LEN("/api/data", req.path, req.path_len);
     TEST_ASSERT_NOT_NULL(req.content_type);
     TEST_ASSERT_EQUAL_size_t(strlen(body), req.content_length);
@@ -202,21 +202,21 @@ void test_http1_post_with_body(void)
     TEST_ASSERT_EQUAL_STRING_LEN(body, (const char *)req_body, strlen(body));
 
     /* Echo body back in response */
-    io_response_t resp;
-    int rc = io_response_init(&resp);
+    ioh_response_t resp;
+    int rc = ioh_response_init(&resp);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_respond_json(&resp, 200, body);
+    rc = ioh_respond_json(&resp, 200, body);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     uint8_t out[4096];
-    int slen = io_http1_serialize_response(&resp, out, sizeof(out));
+    int slen = ioh_http1_serialize_response(&resp, out, sizeof(out));
     TEST_ASSERT_GREATER_THAN(0, slen);
 
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, body));
     TEST_ASSERT_TRUE(buf_contains(out, (size_t)slen, "HTTP/1.1 200 OK"));
 
-    io_response_destroy(&resp);
+    ioh_response_destroy(&resp);
 }
 
 /* ---- TLS client helpers (adapted from test_tls_uring.c) ---- */
@@ -224,10 +224,10 @@ void test_http1_post_with_body(void)
 typedef struct {
     WOLFSSL_CTX *ctx;
     WOLFSSL *ssl;
-    uint8_t cipher_in_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_in_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_in_len;
     size_t cipher_in_pos;
-    uint8_t cipher_out_buf[IO_TLS_CIPHER_BUF_SIZE];
+    uint8_t cipher_out_buf[IOH_TLS_CIPHER_BUF_SIZE];
     size_t cipher_out_len;
 } test_tls_client_t;
 
@@ -258,7 +258,7 @@ static int client_send_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx)
     (void)ssl;
     test_tls_client_t *client = ctx;
 
-    size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
+    size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_out_len;
     if (space == 0) {
         return WOLFSSL_CBIO_ERR_WANT_WRITE;
     }
@@ -319,28 +319,28 @@ static void client_destroy(test_tls_client_t *client)
     free(client);
 }
 
-static void shuttle_data(io_tls_conn_t *server, test_tls_client_t *client)
+static void shuttle_data(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     const uint8_t *sout;
     size_t slen;
-    (void)io_tls_get_output(server, &sout, &slen);
+    (void)ioh_tls_get_output(server, &sout, &slen);
     if (slen > 0) {
-        size_t space = IO_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
+        size_t space = IOH_TLS_CIPHER_BUF_SIZE - client->cipher_in_len;
         size_t copy = slen < space ? slen : space;
         if (copy > 0) {
             memcpy(client->cipher_in_buf + client->cipher_in_len, sout, copy);
             client->cipher_in_len += copy;
-            io_tls_consume_output(server, copy);
+            ioh_tls_consume_output(server, copy);
         }
     }
 
     if (client->cipher_out_len > 0) {
-        (void)io_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
+        (void)ioh_tls_feed_input(server, client->cipher_out_buf, client->cipher_out_len);
         client->cipher_out_len = 0;
     }
 }
 
-static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client)
+static bool do_buffer_handshake(ioh_tls_conn_t *server, test_tls_client_t *client)
 {
     bool server_done = false;
     bool client_done = false;
@@ -349,7 +349,7 @@ static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client
         shuttle_data(server, client);
 
         if (!server_done) {
-            int ret = io_tls_handshake(server);
+            int ret = ioh_tls_handshake(server);
             if (ret == 0) {
                 server_done = true;
             } else if (ret != -EAGAIN) {
@@ -386,15 +386,15 @@ static bool do_buffer_handshake(io_tls_conn_t *server, test_tls_client_t *client
 void test_http1_tls_request_response(void)
 {
     /* Set up server-side TLS context */
-    io_tls_config_t cfg;
-    io_tls_config_init(&cfg);
+    ioh_tls_config_t cfg;
+    ioh_tls_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
 
-    io_tls_ctx_t *sctx = io_tls_ctx_create(&cfg);
+    ioh_tls_ctx_t *sctx = ioh_tls_ctx_create(&cfg);
     TEST_ASSERT_NOT_NULL(sctx);
 
-    io_tls_conn_t *sconn = io_tls_conn_create(sctx, -1);
+    ioh_tls_conn_t *sconn = ioh_tls_conn_create(sctx, -1);
     TEST_ASSERT_NOT_NULL(sconn);
 
     test_tls_client_t *client = client_create();
@@ -416,30 +416,30 @@ void test_http1_tls_request_response(void)
 
     /* Server reads plaintext */
     uint8_t plaintext[4096];
-    int rret = io_tls_read(sconn, plaintext, sizeof(plaintext));
+    int rret = ioh_tls_read(sconn, plaintext, sizeof(plaintext));
     TEST_ASSERT_GREATER_THAN(0, rret);
 
     /* Parse the decrypted HTTP request */
-    io_request_t req;
-    int consumed = io_http1_parse_request(plaintext, (size_t)rret, &req);
+    ioh_request_t req;
+    int consumed = ioh_http1_parse_request(plaintext, (size_t)rret, &req);
     TEST_ASSERT_GREATER_THAN(0, consumed);
-    TEST_ASSERT_EQUAL(IO_METHOD_GET, req.method);
+    TEST_ASSERT_EQUAL(IOH_METHOD_GET, req.method);
     TEST_ASSERT_EQUAL_STRING_LEN("/api/status", req.path, req.path_len);
 
     /* Build response */
-    io_response_t resp;
-    int rc = io_response_init(&resp);
+    ioh_response_t resp;
+    int rc = ioh_response_init(&resp);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_respond_json(&resp, 200, "{\"running\":true}");
+    rc = ioh_respond_json(&resp, 200, "{\"running\":true}");
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     uint8_t resp_buf[4096];
-    int slen = io_http1_serialize_response(&resp, resp_buf, sizeof(resp_buf));
+    int slen = ioh_http1_serialize_response(&resp, resp_buf, sizeof(resp_buf));
     TEST_ASSERT_GREATER_THAN(0, slen);
 
     /* Server sends response through TLS */
-    wret = io_tls_write(sconn, resp_buf, (size_t)slen);
+    wret = ioh_tls_write(sconn, resp_buf, (size_t)slen);
     TEST_ASSERT_EQUAL_INT(slen, wret);
 
     shuttle_data(sconn, client);
@@ -453,10 +453,10 @@ void test_http1_tls_request_response(void)
     TEST_ASSERT_TRUE(buf_contains((const uint8_t *)client_buf, (size_t)rret, "HTTP/1.1 200 OK"));
     TEST_ASSERT_TRUE(buf_contains((const uint8_t *)client_buf, (size_t)rret, "{\"running\":true}"));
 
-    io_response_destroy(&resp);
+    ioh_response_destroy(&resp);
     client_destroy(client);
-    io_tls_conn_destroy(sconn);
-    io_tls_ctx_destroy(sctx);
+    ioh_tls_conn_destroy(sconn);
+    ioh_tls_ctx_destroy(sctx);
 }
 
 /* ---- Test 6: PROXY protocol v1 + HTTP request ---- */
@@ -480,8 +480,8 @@ void test_http1_proxy_then_request(void)
     size_t total_len = ppv1_len + http_len;
 
     /* Step 1: decode PROXY protocol */
-    io_proxy_result_t proxy;
-    int proxy_consumed = io_proxy_decode(buf, total_len, &proxy);
+    ioh_proxy_result_t proxy;
+    int proxy_consumed = ioh_proxy_decode(buf, total_len, &proxy);
     TEST_ASSERT_GREATER_THAN(0, proxy_consumed);
     TEST_ASSERT_EQUAL_UINT8(1, proxy.version);
     TEST_ASSERT_FALSE(proxy.is_local);
@@ -498,10 +498,10 @@ void test_http1_proxy_then_request(void)
     const uint8_t *http_start = buf + proxy_consumed;
     size_t http_remaining = total_len - (size_t)proxy_consumed;
 
-    io_request_t req;
-    int http_consumed = io_http1_parse_request(http_start, http_remaining, &req);
+    ioh_request_t req;
+    int http_consumed = ioh_http1_parse_request(http_start, http_remaining, &req);
     TEST_ASSERT_GREATER_THAN(0, http_consumed);
-    TEST_ASSERT_EQUAL(IO_METHOD_GET, req.method);
+    TEST_ASSERT_EQUAL(IOH_METHOD_GET, req.method);
     TEST_ASSERT_EQUAL_STRING_LEN("/behind-proxy", req.path, req.path_len);
     TEST_ASSERT_NOT_NULL(req.host);
     TEST_ASSERT_TRUE(req.keep_alive);

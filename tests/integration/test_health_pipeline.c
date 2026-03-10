@@ -6,9 +6,9 @@
  * through the complete TCP -> io_uring -> server -> router -> handler pipeline.
  */
 
-#include "core/io_health.h"
-#include "core/io_server.h"
-#include "router/io_router.h"
+#include "core/ioh_health.h"
+#include "core/ioh_server.h"
+#include "router/ioh_router.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -89,32 +89,32 @@ static ssize_t recv_response(int fd, char *buf, size_t cap)
 
 static uint16_t next_port = 20080;
 
-static io_server_t *make_server(void)
+static ioh_server_t *make_server(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = next_port++;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
-    return io_server_create(&cfg);
+    return ioh_server_create(&cfg);
 }
 
 /* ---- Test 1: /health returns 200 with {"status":"ok"} ---- */
 
 void test_health_endpoint_returns_ok(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
 
-    io_health_config_t hcfg;
-    io_health_config_init(&hcfg);
-    TEST_ASSERT_EQUAL_INT(0, io_health_register(router, srv, &hcfg));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    ioh_health_config_t hcfg;
+    ioh_health_config_init(&hcfg);
+    TEST_ASSERT_EQUAL_INT(0, ioh_health_register(router, srv, &hcfg));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -128,7 +128,7 @@ void test_health_endpoint_returns_ok(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -142,26 +142,26 @@ void test_health_endpoint_returns_ok(void)
                                  "Expected {\"status\":\"ok\"} body from /health");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 2: /ready returns 200 with {"status":"ready"} ---- */
 
 void test_ready_endpoint_returns_ready(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
 
-    io_health_config_t hcfg;
-    io_health_config_init(&hcfg);
-    TEST_ASSERT_EQUAL_INT(0, io_health_register(router, srv, &hcfg));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    ioh_health_config_t hcfg;
+    ioh_health_config_init(&hcfg);
+    TEST_ASSERT_EQUAL_INT(0, ioh_health_register(router, srv, &hcfg));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -175,7 +175,7 @@ void test_ready_endpoint_returns_ready(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -189,26 +189,26 @@ void test_ready_endpoint_returns_ready(void)
                                  "Expected {\"status\":\"ready\"} body from /ready");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 3: /live returns 200 with {"status":"ok"} (no checkers) ---- */
 
 void test_live_endpoint_returns_ok(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
 
-    io_health_config_t hcfg;
-    io_health_config_init(&hcfg);
-    TEST_ASSERT_EQUAL_INT(0, io_health_register(router, srv, &hcfg));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    ioh_health_config_t hcfg;
+    ioh_health_config_init(&hcfg);
+    TEST_ASSERT_EQUAL_INT(0, ioh_health_register(router, srv, &hcfg));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -222,7 +222,7 @@ void test_live_endpoint_returns_ok(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -234,26 +234,26 @@ void test_live_endpoint_returns_ok(void)
                                  "Expected {\"status\":\"ok\"} body from /live");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 4: Non-health route returns 404 ---- */
 
 void test_health_nonexistent_returns_404(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
 
-    io_health_config_t hcfg;
-    io_health_config_init(&hcfg);
-    TEST_ASSERT_EQUAL_INT(0, io_health_register(router, srv, &hcfg));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    ioh_health_config_t hcfg;
+    ioh_health_config_init(&hcfg);
+    TEST_ASSERT_EQUAL_INT(0, ioh_health_register(router, srv, &hcfg));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -267,7 +267,7 @@ void test_health_nonexistent_returns_404(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -277,8 +277,8 @@ void test_health_nonexistent_returns_404(void)
                                  "Expected HTTP 404 for non-health route");
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 int main(void)

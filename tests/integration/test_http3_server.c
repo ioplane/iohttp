@@ -7,11 +7,11 @@
  * Same approach as test_http2_server.c.
  */
 
-#include "core/io_ctx.h"
-#include "http/io_http3.h"
-#include "http/io_quic.h"
-#include "http/io_request.h"
-#include "http/io_response.h"
+#include "core/ioh_ctx.h"
+#include "http/ioh_http3.h"
+#include "http/ioh_quic.h"
+#include "http/ioh_request.h"
+#include "http/ioh_response.h"
 
 #include <string.h>
 
@@ -48,28 +48,28 @@ static void init_cert_paths(void)
 
 /* ---- Test request handler ---- */
 
-static int test_handler(io_ctx_t *c, int64_t stream_id, void *user_data)
+static int test_handler(ioh_ctx_t *c, int64_t stream_id, void *user_data)
 {
     (void)stream_id;
     (void)user_data;
-    return io_ctx_json(c, 200, "{\"protocol\":\"h3\"}");
+    return ioh_ctx_json(c, 200, "{\"protocol\":\"h3\"}");
 }
 
 /* ---- Tests ---- */
 
 void test_quic_server_conn_lifecycle(void)
 {
-    io_quic_config_t cfg;
-    io_quic_config_init(&cfg);
+    ioh_quic_config_t cfg;
+    ioh_quic_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
-    io_quic_callbacks_t cbs = {0};
+    ioh_quic_callbacks_t cbs = {0};
     uint8_t dcid[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     uint8_t scid[8] = {9, 10, 11, 12, 13, 14, 15, 16};
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
-    io_quic_conn_t *conn = io_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
+    ioh_quic_conn_t *conn = ioh_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
                                                (struct sockaddr *)&local,
                                                (struct sockaddr *)&remote, nullptr);
     if (conn == nullptr) {
@@ -78,28 +78,28 @@ void test_quic_server_conn_lifecycle(void)
     }
 
     /* Verify initial state */
-    TEST_ASSERT_FALSE(io_quic_is_handshake_done(conn));
-    TEST_ASSERT_FALSE(io_quic_is_closed(conn));
-    TEST_ASSERT_TRUE(io_quic_want_write(conn));
+    TEST_ASSERT_FALSE(ioh_quic_is_handshake_done(conn));
+    TEST_ASSERT_FALSE(ioh_quic_is_closed(conn));
+    TEST_ASSERT_TRUE(ioh_quic_want_write(conn));
 
     /* Close gracefully */
-    TEST_ASSERT_EQUAL_INT(0, io_quic_close(conn, 0));
-    io_quic_conn_destroy(conn);
+    TEST_ASSERT_EQUAL_INT(0, ioh_quic_close(conn, 0));
+    ioh_quic_conn_destroy(conn);
 }
 
 void test_http3_session_on_quic_conn(void)
 {
-    io_quic_config_t qcfg;
-    io_quic_config_init(&qcfg);
+    ioh_quic_config_t qcfg;
+    ioh_quic_config_init(&qcfg);
     qcfg.cert_file = TEST_SERVER_CERT;
     qcfg.key_file = TEST_SERVER_KEY;
-    io_quic_callbacks_t cbs = {0};
+    ioh_quic_callbacks_t cbs = {0};
     uint8_t dcid[8] = {1}; //-V1009
     uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
-    io_quic_conn_t *qconn = io_quic_conn_create(&qcfg, &cbs, dcid, 8, scid, 8,
+    ioh_quic_conn_t *qconn = ioh_quic_conn_create(&qcfg, &cbs, dcid, 8, scid, 8,
                                                 (struct sockaddr *)&local,
                                                 (struct sockaddr *)&remote, nullptr);
     if (qconn == nullptr) {
@@ -107,27 +107,27 @@ void test_http3_session_on_quic_conn(void)
         return;
     }
 
-    io_http3_config_t h3cfg;
-    io_http3_config_init(&h3cfg);
-    io_http3_session_t *h3 = io_http3_session_create(&h3cfg, qconn, test_handler, nullptr);
+    ioh_http3_config_t h3cfg;
+    ioh_http3_config_init(&h3cfg);
+    ioh_http3_session_t *h3 = ioh_http3_session_create(&h3cfg, qconn, test_handler, nullptr);
     TEST_ASSERT_NOT_NULL(h3);
-    TEST_ASSERT_FALSE(io_http3_is_shutdown(h3));
+    TEST_ASSERT_FALSE(ioh_http3_is_shutdown(h3));
 
     /* Shutdown */
-    TEST_ASSERT_EQUAL_INT(0, io_http3_shutdown(h3));
-    TEST_ASSERT_TRUE(io_http3_is_shutdown(h3));
+    TEST_ASSERT_EQUAL_INT(0, ioh_http3_shutdown(h3));
+    TEST_ASSERT_TRUE(ioh_http3_is_shutdown(h3));
 
-    io_http3_session_destroy(h3);
-    io_quic_conn_destroy(qconn);
+    ioh_http3_session_destroy(h3);
+    ioh_quic_conn_destroy(qconn);
 }
 
 void test_alt_svc_in_response(void)
 {
-    io_response_t resp;
-    int rc = io_response_init(&resp);
+    ioh_response_t resp;
+    int rc = ioh_response_init(&resp);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    rc = io_response_set_header(&resp, "alt-svc", "h3=\":443\"");
+    rc = ioh_response_set_header(&resp, "alt-svc", "h3=\":443\"");
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     bool found = false;
@@ -137,30 +137,30 @@ void test_alt_svc_in_response(void)
         }
     }
     TEST_ASSERT_TRUE(found);
-    io_response_destroy(&resp);
+    ioh_response_destroy(&resp);
 }
 
 void test_quic_conn_destroy_after_close(void)
 {
-    io_quic_config_t cfg;
-    io_quic_config_init(&cfg);
+    ioh_quic_config_t cfg;
+    ioh_quic_config_init(&cfg);
     cfg.cert_file = TEST_SERVER_CERT;
     cfg.key_file = TEST_SERVER_KEY;
-    io_quic_callbacks_t cbs = {0};
+    ioh_quic_callbacks_t cbs = {0};
     uint8_t dcid[8] = {1}; //-V1009
     uint8_t scid[8] = {2}; //-V1009
     struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(443)};
     struct sockaddr_in remote = {.sin_family = AF_INET, .sin_port = htons(12345)};
 
-    io_quic_conn_t *conn = io_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
+    ioh_quic_conn_t *conn = ioh_quic_conn_create(&cfg, &cbs, dcid, 8, scid, 8,
                                                (struct sockaddr *)&local,
                                                (struct sockaddr *)&remote, nullptr);
     if (conn == nullptr) {
         TEST_IGNORE_MESSAGE("QUIC conn failed");
         return;
     }
-    (void)io_quic_close(conn, 0);
-    io_quic_conn_destroy(conn);
+    (void)ioh_quic_close(conn, 0);
+    ioh_quic_conn_destroy(conn);
 }
 
 int main(void)

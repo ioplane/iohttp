@@ -3,7 +3,7 @@
  * @brief Integration tests for signalfd-based SIGTERM/SIGQUIT shutdown.
  */
 
-#include "core/io_server.h"
+#include "core/ioh_server.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -14,7 +14,7 @@
 #include <unity.h>
 
 /* Block SIGTERM + SIGQUIT process-wide so spawned threads inherit the mask.
- * io_server_run() creates a signalfd to consume these signals via io_uring. */
+ * ioh_server_run() creates a signalfd to consume these signals via io_uring. */
 static sigset_t saved_mask;
 
 void setUp(void)
@@ -26,7 +26,7 @@ void tearDown(void)
 
 /* ---- Handler ---- */
 
-static int on_request_cb(io_ctx_t *c, void *user_data)
+static int on_request_cb(ioh_ctx_t *c, void *user_data)
 {
     (void)user_data;
     (void)c;
@@ -56,16 +56,16 @@ static void *signal_sender(void *arg)
 
 void test_sigterm_triggers_graceful_shutdown(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 19300;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
     cfg.keepalive_timeout_ms = 500;
 
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, on_request_cb, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, on_request_cb, nullptr));
 
     /* Launch thread to send SIGTERM after 200ms */
     signal_args_t sa = {.signo = SIGTERM, .delay_ms = 200};
@@ -73,28 +73,28 @@ void test_sigterm_triggers_graceful_shutdown(void)
     int prc = pthread_create(&tid, nullptr, signal_sender, &sa);
     TEST_ASSERT_EQUAL_INT(0, prc);
 
-    /* io_server_run() should return 0 after receiving SIGTERM */
-    int ret = io_server_run(srv);
+    /* ioh_server_run() should return 0 after receiving SIGTERM */
+    int ret = ioh_server_run(srv);
     TEST_ASSERT_EQUAL_INT(0, ret);
 
     pthread_join(tid, nullptr);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 /* ---- Test 2: SIGQUIT triggers immediate shutdown ---- */
 
 void test_sigquit_triggers_immediate_shutdown(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 19301;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
     cfg.keepalive_timeout_ms = 500;
 
-    io_server_t *srv = io_server_create(&cfg);
+    ioh_server_t *srv = ioh_server_create(&cfg);
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, on_request_cb, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, on_request_cb, nullptr));
 
     /* Launch thread to send SIGQUIT after 200ms */
     signal_args_t sa = {.signo = SIGQUIT, .delay_ms = 200};
@@ -102,12 +102,12 @@ void test_sigquit_triggers_immediate_shutdown(void)
     int prc = pthread_create(&tid, nullptr, signal_sender, &sa);
     TEST_ASSERT_EQUAL_INT(0, prc);
 
-    /* io_server_run() should return 0 after receiving SIGQUIT */
-    int ret = io_server_run(srv);
+    /* ioh_server_run() should return 0 after receiving SIGQUIT */
+    int ret = ioh_server_run(srv);
     TEST_ASSERT_EQUAL_INT(0, ret);
 
     pthread_join(tid, nullptr);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)

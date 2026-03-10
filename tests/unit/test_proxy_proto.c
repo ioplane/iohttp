@@ -3,7 +3,7 @@
  * @brief Unit tests for PROXY protocol v1/v2 decoder.
  */
 
-#include "http/io_proxy_proto.h"
+#include "http/ioh_proxy_proto.h"
 
 #include <errno.h>
 #include <string.h>
@@ -23,9 +23,9 @@ void tearDown(void)
 void test_proxy_v1_tcp4(void)
 {
     const char *hdr = "PROXY TCP4 192.168.1.1 10.0.0.1 56324 443\r\n";
-    io_proxy_result_t res;
+    ioh_proxy_result_t res;
 
-    int rc = io_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
+    int rc = ioh_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
     TEST_ASSERT_GREATER_THAN(0, rc);
     TEST_ASSERT_EQUAL_UINT8(1, res.version);
     TEST_ASSERT_FALSE(res.is_local);
@@ -50,9 +50,9 @@ void test_proxy_v1_tcp4(void)
 void test_proxy_v1_tcp6(void)
 {
     const char *hdr = "PROXY TCP6 ::1 ::1 56324 443\r\n";
-    io_proxy_result_t res;
+    ioh_proxy_result_t res;
 
-    int rc = io_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
+    int rc = ioh_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
     TEST_ASSERT_GREATER_THAN(0, rc);
     TEST_ASSERT_EQUAL_UINT8(1, res.version);
     TEST_ASSERT_FALSE(res.is_local);
@@ -67,9 +67,9 @@ void test_proxy_v1_tcp6(void)
 void test_proxy_v1_unknown(void)
 {
     const char *hdr = "PROXY UNKNOWN\r\n";
-    io_proxy_result_t res;
+    ioh_proxy_result_t res;
 
-    int rc = io_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
+    int rc = ioh_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
     TEST_ASSERT_GREATER_THAN(0, rc);
     TEST_ASSERT_EQUAL_UINT8(1, res.version);
     TEST_ASSERT_TRUE(res.is_local);
@@ -79,18 +79,18 @@ void test_proxy_v1_unknown(void)
 void test_proxy_v1_incomplete(void)
 {
     const char *hdr = "PROXY TCP4 192.168.1.1";
-    io_proxy_result_t res;
+    ioh_proxy_result_t res;
 
-    int rc = io_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
+    int rc = ioh_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
     TEST_ASSERT_EQUAL_INT(-EAGAIN, rc);
 }
 
 void test_proxy_v1_malformed(void)
 {
     const char *hdr = "PROXY GARBAGE 1 2 3 4\r\n";
-    io_proxy_result_t res;
+    ioh_proxy_result_t res;
 
-    int rc = io_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
+    int rc = ioh_proxy_decode((const uint8_t *)hdr, strlen(hdr), &res);
     TEST_ASSERT_EQUAL_INT(-EINVAL, rc);
 }
 
@@ -137,8 +137,8 @@ void test_proxy_v2_tcp4(void)
         0xBB,
     };
 
-    io_proxy_result_t res;
-    int rc = io_proxy_decode(pp2, sizeof(pp2), &res);
+    ioh_proxy_result_t res;
+    int rc = ioh_proxy_decode(pp2, sizeof(pp2), &res);
 
     TEST_ASSERT_EQUAL_INT((int)sizeof(pp2), rc);
     TEST_ASSERT_EQUAL_UINT8(2, res.version);
@@ -225,8 +225,8 @@ void test_proxy_v2_tcp6(void)
         0xBB,
     };
 
-    io_proxy_result_t res;
-    int rc = io_proxy_decode(pp2, sizeof(pp2), &res);
+    ioh_proxy_result_t res;
+    int rc = ioh_proxy_decode(pp2, sizeof(pp2), &res);
 
     TEST_ASSERT_EQUAL_INT((int)sizeof(pp2), rc);
     TEST_ASSERT_EQUAL_UINT8(2, res.version);
@@ -263,8 +263,8 @@ void test_proxy_v2_local(void)
         0x00,
     };
 
-    io_proxy_result_t res;
-    int rc = io_proxy_decode(pp2, sizeof(pp2), &res);
+    ioh_proxy_result_t res;
+    int rc = ioh_proxy_decode(pp2, sizeof(pp2), &res);
 
     TEST_ASSERT_EQUAL_INT((int)sizeof(pp2), rc);
     TEST_ASSERT_EQUAL_UINT8(2, res.version);
@@ -320,8 +320,8 @@ void test_proxy_v2_with_tlv(void)
         0x74,
     };
 
-    io_proxy_result_t res;
-    int rc = io_proxy_decode(pp2, sizeof(pp2), &res);
+    ioh_proxy_result_t res;
+    int rc = ioh_proxy_decode(pp2, sizeof(pp2), &res);
 
     /* Should consume all bytes including TLV */
     TEST_ASSERT_EQUAL_INT((int)sizeof(pp2), rc);
@@ -342,8 +342,8 @@ void test_proxy_v2_invalid_signature(void)
         0x00, 0x0C, 0xC0, 0xA8, 0x01, 0x01, 0x0A, 0x00, 0x00, 0x01, 0xDC, 0x04, 0x01, 0xBB,
     };
 
-    io_proxy_result_t res;
-    int rc = io_proxy_decode(pp2, sizeof(pp2), &res);
+    ioh_proxy_result_t res;
+    int rc = ioh_proxy_decode(pp2, sizeof(pp2), &res);
 
     /* Not a v2 header, not "PROXY " prefix either */
     TEST_ASSERT_EQUAL_INT(-ENOSPC, rc);

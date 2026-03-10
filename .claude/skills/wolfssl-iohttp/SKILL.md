@@ -27,8 +27,8 @@ wolfSSL reads/writes through application-controlled buffers, NOT directly from s
 // SEND: HTTP response → wolfSSL_write() → cipher_buf → io_uring send
 
 // Custom I/O callbacks (set per-SSL object):
-static int io_tls_recv_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx) {
-    io_tls_ctx_t *tls = ctx;
+static int ioh_tls_recv_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx) {
+    ioh_tls_ctx_t *tls = ctx;
     if (tls->cipher_in_len == 0) {
         return WOLFSSL_CBIO_ERR_WANT_READ;  // Need more data from io_uring
     }
@@ -39,8 +39,8 @@ static int io_tls_recv_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx) {
     return (int)copy;
 }
 
-static int io_tls_send_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx) {
-    io_tls_ctx_t *tls = ctx;
+static int ioh_tls_send_cb(WOLFSSL *ssl, char *buf, int sz, void *ctx) {
+    ioh_tls_ctx_t *tls = ctx;
     if (tls->cipher_out_len + (size_t)sz > tls->cipher_out_cap) {
         return WOLFSSL_CBIO_ERR_WANT_WRITE;  // Output buffer full
     }
@@ -67,11 +67,11 @@ if (ret <= 0) {
     case WOLFSSL_ERROR_WANT_READ:
         // Submit io_uring recv SQE for more ciphertext
         // State: wait for CQE, then retry wolfSSL_read
-        return IO_TLS_WANT_READ;
+        return IOH_TLS_WANT_READ;
     case WOLFSSL_ERROR_WANT_WRITE:
         // Submit io_uring send SQE to flush cipher_out_buf
         // Then retry wolfSSL_read
-        return IO_TLS_WANT_WRITE;
+        return IOH_TLS_WANT_WRITE;
     default:
         // Real error — log and close
         return -EIO;
@@ -92,7 +92,7 @@ const char *protos = "\x02h2\x08http/1.1";
 wolfSSL_CTX_UseALPN(ctx, protos, (unsigned)strlen(protos), WOLFSSL_ALPN_FAILED_ON_MISMATCH);
 
 // SNI callback for multi-tenant
-wolfSSL_CTX_set_servername_callback(ctx, io_tls_sni_cb);
+wolfSSL_CTX_set_servername_callback(ctx, ioh_tls_sni_cb);
 
 // Partial write for non-blocking
 wolfSSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
@@ -122,10 +122,10 @@ typedef struct {
     char             issuer[256];
     uint8_t          fingerprint[32];  // SHA-256
     // SAN list
-} io_tls_peer_info_t;
+} ioh_tls_peer_info_t;
 
 // Populate after successful handshake:
-void io_tls_extract_peer_info(WOLFSSL *ssl, io_tls_peer_info_t *info);
+void ioh_tls_extract_peer_info(WOLFSSL *ssl, ioh_tls_peer_info_t *info);
 ```
 
 ## mTLS
@@ -134,7 +134,7 @@ void io_tls_extract_peer_info(WOLFSSL *ssl, io_tls_peer_info_t *info);
 // Require client certificate
 wolfSSL_CTX_set_verify(ctx,
     SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
-    io_tls_verify_cb);
+    ioh_tls_verify_cb);
 
 // CRL checking
 wolfSSL_CTX_LoadCRL(ctx, crl_path, SSL_FILETYPE_PEM, 0);
@@ -146,7 +146,7 @@ wolfSSL_CTX_EnableCRL(ctx, WOLFSSL_CRL_CHECKALL);
 ```c
 // Signal handler or admin API triggers:
 // Atomic pointer swap with reference counting — old ctx freed after all connections close
-int io_tls_reload_certs(io_tls_t *tls, const char *cert, const char *key) {
+int ioh_tls_reload_certs(ioh_tls_t *tls, const char *cert, const char *key) {
     WOLFSSL_CTX *new_ctx = /* create and configure new ctx */;
     WOLFSSL_CTX *old_ctx = tls->ctx;
     atomic_store_explicit(&tls->ctx, new_ctx, memory_order_release);

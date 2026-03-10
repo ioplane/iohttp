@@ -16,9 +16,9 @@ implementation.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      User Application                       │
-│   io_server_create() → io_route_add() → io_server_run()    │
+│   ioh_server_create() → ioh_route_add() → ioh_server_run()    │
 ├─────────────────────────────────────────────────────────────┤
-│                     Public C API (io_*)                      │
+│                     Public C API (ioh_*)                      │
 ├──────────┬──────────┬──────────┬───────────┬────────────────┤
 │  Router  │Middleware│  Static  │ WebSocket │      SSE       │
 │  (trie)  │  chain   │  files   │ RFC 6455  │  text/stream   │
@@ -52,11 +52,11 @@ multi-reactor ring-per-thread (production mode).
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_loop.{h,c}` | ~500 | io_uring ring setup, SQE submission, CQE reaping, timer wheel |
-| `io_server.{h,c}` | ~1055 | Server lifecycle, linked timeouts, signalfd shutdown, request limits, request ID |
-| `io_buffer.{h,c}` | ~250 | Provided buffer ring management, buffer pool |
-| `io_conn.{h,c}` | ~385 | Connection state machine, timeout phase tracking, PROXY state |
-| `io_log.{h,c}` | ~165 | Structured logging with levels, custom sink callbacks |
+| `ioh_loop.{h,c}` | ~500 | io_uring ring setup, SQE submission, CQE reaping, timer wheel |
+| `ioh_server.{h,c}` | ~1055 | Server lifecycle, linked timeouts, signalfd shutdown, request limits, request ID |
+| `ioh_buffer.{h,c}` | ~250 | Provided buffer ring management, buffer pool |
+| `ioh_conn.{h,c}` | ~385 | Connection state machine, timeout phase tracking, PROXY state |
+| `ioh_log.{h,c}` | ~165 | Structured logging with levels, custom sink callbacks |
 
 **Key io_uring features used:**
 - `IORING_OP_ACCEPT` with `IORING_ACCEPT_MULTISHOT` — one SQE accepts all connections
@@ -124,8 +124,8 @@ wolfSSL native API integration (NOT OpenSSL compatibility layer).
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_tls.{h,c}` | ~460 | wolfSSL context, custom I/O callbacks for io_uring |
-| `io_tls_quic.{h,c}` | planned | QUIC crypto via ngtcp2_crypto_wolfssl |
+| `ioh_tls.{h,c}` | ~460 | wolfSSL context, custom I/O callbacks for io_uring |
+| `ioh_tls_quic.{h,c}` | planned | QUIC crypto via ngtcp2_crypto_wolfssl |
 
 **I/O callback pattern for io_uring:**
 ```c
@@ -172,13 +172,13 @@ Three protocol implementations sharing a unified request/response abstraction.
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_http1.{h,c}` | ~540 | picohttpparser wrapper, request object, chunked TE |
-| `io_http2.{h,c}` | ~770 | nghttp2 session, stream mux, HPACK, flow control |
-| `io_http3.{h,c}` | planned | ngtcp2 QUIC transport + nghttp3 HTTP/3 + QPACK + CID demux |
-| `io_request.{h,c}` | ~350 | Unified request abstraction across protocols |
-| `io_response.{h,c}` | ~330 | Response builder, header serialization |
-| `io_multipart.{h,c}` | ~360 | Multipart form-data parsing (RFC 2046) |
-| `io_proxy_proto.{h,c}` | ~370 | PROXY protocol v1/v2 decoder |
+| `ioh_http1.{h,c}` | ~540 | picohttpparser wrapper, request object, chunked TE |
+| `ioh_http2.{h,c}` | ~770 | nghttp2 session, stream mux, HPACK, flow control |
+| `ioh_http3.{h,c}` | planned | ngtcp2 QUIC transport + nghttp3 HTTP/3 + QPACK + CID demux |
+| `ioh_request.{h,c}` | ~350 | Unified request abstraction across protocols |
+| `ioh_response.{h,c}` | ~330 | Response builder, header serialization |
+| `ioh_multipart.{h,c}` | ~360 | Multipart form-data parsing (RFC 2046) |
+| `ioh_proxy_proto.{h,c}` | ~370 | PROXY protocol v1/v2 decoder |
 
 **Unified request flow:**
 ```
@@ -190,11 +190,11 @@ wolfSSL decrypt (if TLS)
     ↓
 ALPN → protocol-specific parser
     ↓
-Unified io_request_t
+Unified ioh_request_t
     ↓
 Router → Middleware → Handler
     ↓
-io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring send
+ioh_response_t → protocol-specific framing → wolfSSL encrypt → io_uring send
 ```
 
 **HTTP/2 graceful shutdown (two-phase GOAWAY):**
@@ -222,11 +222,11 @@ io_response_t → protocol-specific framing → wolfSSL encrypt → io_uring sen
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_radix.{h,c}` | ~530 | Radix trie (compressed prefix tree), internal |
-| `io_router.{h,c}` | ~530 | Per-method trees, auto-405/HEAD, path correction |
-| `io_route_group.{h,c}` | ~310 | Nested groups with prefix composition |
-| `io_route_inspect.{h,c}` | ~130 | Route walking, introspection, liboas binding |
-| `io_middleware.{h,c}` | ~190 | Middleware chain, error handler, next() pattern |
+| `ioh_radix.{h,c}` | ~530 | Radix trie (compressed prefix tree), internal |
+| `ioh_router.{h,c}` | ~530 | Per-method trees, auto-405/HEAD, path correction |
+| `ioh_route_group.{h,c}` | ~310 | Nested groups with prefix composition |
+| `ioh_route_inspect.{h,c}` | ~130 | Route walking, introspection, liboas binding |
+| `ioh_middleware.{h,c}` | ~190 | Middleware chain, error handler, next() pattern |
 
 **Design heritage:** Radix trie + per-method trees (httprouter), static > param > wildcard
 priority (httprouter/echo/bunrouter), handler-returns-error (bunrouter/echo), route groups
@@ -236,7 +236,7 @@ route introspection (gorilla/mux), metadata attachment for OpenAPI (FastAPI).
 **Routing features:**
 - **Radix trie** with compressed prefix sharing, separate tree per HTTP method
 - **Deterministic priority** (order-independent): static > `:param` > `*wildcard`
-- **Method-specific registration**: `io_router_get()`, `io_router_post()`, etc.
+- **Method-specific registration**: `ioh_router_get()`, `ioh_router_post()`, etc.
 - **Path parameters**: `/api/users/:id/config` — typed extraction (string, i64, u64, bool)
 - **Wildcard routes**: `/static/*path` — captures remaining path
 - **Nested route groups**: prefix composition + per-group middleware inheritance
@@ -245,8 +245,8 @@ route introspection (gorilla/mux), metadata attachment for OpenAPI (FastAPI).
 - **Trailing slash redirect**: `/users/` ↔ `/users` → 301
 - **Path auto-correction**: `//foo/../bar` → `/bar` → 301
 - **Conflict detection**: `/:id` + `/:name` on same level → error at registration
-- **Route introspection**: `io_router_walk()` for docs generation, liboas binding
-- **Route metadata**: extensible `io_route_opts_t` with `oas_operation_t*` for liboas
+- **Route introspection**: `ioh_router_walk()` for docs generation, liboas binding
+- **Route metadata**: extensible `ioh_route_opts_t` with `oas_operation_t*` for liboas
 - **Custom handlers**: configurable 404 and 405 handlers
 - **Centralized error handling**: handler returns int (0 or -errno) → error handler
 
@@ -254,12 +254,12 @@ route introspection (gorilla/mux), metadata attachment for OpenAPI (FastAPI).
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_cors.{h,c}` | ~100 | CORS preflight + headers |
-| `io_ratelimit.{h,c}` | ~200 | Token bucket per IP |
-| `io_auth.{h,c}` | ~170 | Basic, Bearer, JWT hooks |
-| `io_security.{h,c}` | ~220 | CSP, HSTS, X-Frame-Options, nosniff |
-| `io_logging.{h,c}` | planned | Structured JSON access/error logs |
-| `io_metrics.{h,c}` | planned | Lock-free thread-local Prometheus metrics |
+| `ioh_cors.{h,c}` | ~100 | CORS preflight + headers |
+| `ioh_ratelimit.{h,c}` | ~200 | Token bucket per IP |
+| `ioh_auth.{h,c}` | ~170 | Basic, Bearer, JWT hooks |
+| `ioh_security.{h,c}` | ~220 | CSP, HSTS, X-Frame-Options, nosniff |
+| `ioh_logging.{h,c}` | planned | Structured JSON access/error logs |
+| `ioh_metrics.{h,c}` | planned | Lock-free thread-local Prometheus metrics |
 
 **Metrics architecture (lock-free):** Each worker thread maintains a thread-local metrics
 registry aligned to 64-byte cache line boundaries. No atomic operations in the request
@@ -269,12 +269,12 @@ Prometheus text exposition format. This eliminates cacheline bouncing that degra
 performance by 30-40% with shared atomic counters.
 
 **Standard metrics:**
-- `io_http_requests_total{method,status}` — counter
-- `io_http_request_duration_seconds` — histogram
-- `io_http_connections_active{protocol}` — gauge (h1/h2/h3)
-- `io_tls_handshake_duration_seconds` — histogram
+- `ioh_http_requests_total{method,status}` — counter
+- `ioh_http_request_duration_seconds` — histogram
+- `ioh_http_connections_active{protocol}` — gauge (h1/h2/h3)
+- `ioh_tls_handshake_duration_seconds` — histogram
 - `io_uring_sqe_submitted_total` — counter
-- `io_bufpool_available` — gauge
+- `ioh_bufpool_available` — gauge
 
 **Health endpoints:** `/health` (liveness, always 200), `/ready` (readiness: TLS certs,
 buffer pools, connection limits).
@@ -283,38 +283,38 @@ buffer pools, connection limits).
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_static.{h,c}` | ~380 | File serving, MIME, ETag, Range, sendfile |
-| `io_spa.{h,c}` | ~180 | SPA fallback, API prefix exclusion |
-| `io_compress.{h,c}` | ~380 | gzip/brotli streaming + precompressed .gz/.br |
-| `io_embed.{h,c}` | planned | C23 #embed for bundled assets |
+| `ioh_static.{h,c}` | ~380 | File serving, MIME, ETag, Range, sendfile |
+| `ioh_spa.{h,c}` | ~180 | SPA fallback, API prefix exclusion |
+| `ioh_compress.{h,c}` | ~380 | gzip/brotli streaming + precompressed .gz/.br |
+| `ioh_embed.{h,c}` | planned | C23 #embed for bundled assets |
 
 ### 7. WebSocket & SSE (`src/ws/`)
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_websocket.{h,c}` | ~330 | RFC 6455 via wslay, frame parse, mask, ping/pong, fragmentation |
-| `io_sse.{h,c}` | ~260 | SSE format, heartbeat, Last-Event-ID |
+| `ioh_websocket.{h,c}` | ~330 | RFC 6455 via wslay, frame parse, mask, ping/pong, fragmentation |
+| `ioh_sse.{h,c}` | ~260 | SSE format, heartbeat, Last-Event-ID |
 
-### 8. liboas Integration (`src/middleware/io_oas.c`)
+### 8. liboas Integration (`src/middleware/ioh_oas.c`)
 
 liboas is a **separate project** — an OpenAPI 3.2.0 library for C23. iohttp provides
 integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 
 | Component | LOC | Description |
 |-----------|-----|-------------|
-| `io_oas.{h,c}` | planned | liboas adapter middleware, mount/publish helpers |
+| `ioh_oas.{h,c}` | planned | liboas adapter middleware, mount/publish helpers |
 
 **Integration architecture (one route lookup):**
 1. At startup, liboas compiles OpenAPI document → `oas_compiled_api_t`
-2. Each iohttp route stores `oas_operation_t*` via `io_route_opts_t.oas_operation`
+2. Each iohttp route stores `oas_operation_t*` via `ioh_route_opts_t.oas_operation`
 3. At runtime, iohttp router finds route (one lookup) → middleware receives already-matched operation
 4. liboas middleware validates request/response against operation schema
 
 **What iohttp provides to liboas:**
-- `io_request_t` → `oas_runtime_request_t` mapping
-- `io_response_t` → `oas_runtime_response_t` mapping
-- `io_tls_peer_info_t` → `oas_security_ctx_t` (TLS/mTLS metadata)
-- `io_conn_info_t` → real client IP (after PROXY protocol decode)
+- `ioh_request_t` → `oas_runtime_request_t` mapping
+- `ioh_response_t` → `oas_runtime_response_t` mapping
+- `ioh_tls_peer_info_t` → `oas_security_ctx_t` (TLS/mTLS metadata)
+- `ioh_conn_info_t` → real client IP (after PROXY protocol decode)
 - Pre-handler request validation hook
 - Post-handler response validation hook
 - `/openapi.json` publish helper
@@ -330,9 +330,9 @@ integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 2. (optional) Read PROXY protocol header → extract real client IP
 3. wolfSSL_accept() via custom I/O callbacks
 4. io_uring recv → provided buffer → wolfSSL_read() → plaintext
-5. picohttpparser parse → io_request_t
+5. picohttpparser parse → ioh_request_t
 6. Router lookup → middleware chain → handler
-7. Handler writes io_response_t
+7. Handler writes ioh_response_t
 8. Serialize headers → wolfSSL_write() → io_uring send
 ```
 
@@ -341,7 +341,7 @@ integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 ```
 1-3. Same as HTTP/1.1 (ALPN selects h2)
 4. io_uring recv → wolfSSL_read() → nghttp2_session_mem_recv()
-5. nghttp2 callbacks fire per-stream → io_request_t per stream
+5. nghttp2 callbacks fire per-stream → ioh_request_t per stream
 6. Router → middleware → handler (per stream)
 7. nghttp2_submit_response() → nghttp2_session_mem_send2()
 8. wolfSSL_write() → io_uring send
@@ -352,7 +352,7 @@ integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 ```
 1. io_uring recv (UDP) → ngtcp2_conn_read_pkt()
 2. QUIC decryption via ngtcp2_crypto_wolfssl
-3. nghttp3_conn_read_stream() → per-stream callbacks → io_request_t
+3. nghttp3_conn_read_stream() → per-stream callbacks → ioh_request_t
 4. Router → middleware → handler
 5. nghttp3_conn_submit_response() → ngtcp2_conn_write_pkt()
 6. io_uring send (UDP)
@@ -371,7 +371,7 @@ integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 - **Arena allocators** — per-request lifetime, freed after response sent
 - **Zero-copy paths** — splice for static files, `SEND_ZC` for large responses
 - **`[[nodiscard]]`** — on all allocation functions
-- **`static_assert`** — compile-time struct size checks (e.g., `sizeof(io_conn_t) <= 512`)
+- **`static_assert`** — compile-time struct size checks (e.g., `sizeof(ioh_conn_t) <= 512`)
 - **No uncontrolled heap growth** — all buffers bounded, oversized requests rejected
 
 ---
@@ -380,11 +380,11 @@ integration points via an adapter middleware, NOT a built-in OpenAPI engine.
 
 Two-level configuration:
 
-1. **Compile-time** — `IO_MAX_CONNECTIONS`, `IO_MAX_HEADERS`, `IO_ENABLE_HTTP2`, etc.
-2. **Runtime** — `io_server_config_t` struct passed to `io_server_create()`
+1. **Compile-time** — `IOH_MAX_CONNECTIONS`, `IOH_MAX_HEADERS`, `IOH_ENABLE_HTTP2`, etc.
+2. **Runtime** — `ioh_server_config_t` struct passed to `ioh_server_create()`
 
 ```c
-io_server_config_t cfg = {
+ioh_server_config_t cfg = {
     .listen_addr   = "0.0.0.0",
     .listen_port   = 8080,
     .tls_cert      = "/path/to/cert.pem",

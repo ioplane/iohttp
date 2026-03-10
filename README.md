@@ -10,7 +10,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue?style=for-the-badge" alt="License"></a>
   <img src="https://img.shields.io/badge/C23-ISO%2FIEC%209899%3A2024-blue?style=for-the-badge" alt="C23">
   <img src="https://img.shields.io/badge/Linux-6.7%2B-orange?style=for-the-badge&logo=linux&logoColor=white" alt="Linux">
-  <img src="https://img.shields.io/badge/io__uring-native-green?style=for-the-badge" alt="io_uring">
+  <img src="https://img.shields.io/badge/ioh__uring-native-green?style=for-the-badge" alt="io_uring">
   <img src="https://img.shields.io/badge/wolfSSL-TLS%201.3-purple?style=for-the-badge" alt="wolfSSL">
   <img src="https://img.shields.io/badge/PROXY%20protocol-v1%2Fv2-teal?style=for-the-badge" alt="PROXY Protocol">
   <img src="https://img.shields.io/badge/version-0.1.0--dev-red?style=for-the-badge" alt="Version">
@@ -87,7 +87,7 @@ Sprint 12 hardening features for production readiness:
 - **Linked timeouts** — header read, body read, and keepalive timeouts via io_uring `LINK_TIMEOUT`; no timer threads, no signal hacks
 - **Request limits** — max header size (431 Request Header Fields Too Large), max body size (413 Content Too Large), configurable per-route
 - **Signal-driven shutdown** — `SIGTERM` triggers graceful drain (stop accepting, finish in-flight, close), `SIGQUIT` triggers immediate shutdown, both via `signalfd` integrated into the io_uring event loop
-- **Structured logging** — `io_log` with severity levels (DEBUG/INFO/WARN/ERROR), custom sink callbacks, default stderr output
+- **Structured logging** — `ioh_log` with severity levels (DEBUG/INFO/WARN/ERROR), custom sink callbacks, default stderr output
 - **Request ID** — auto-generated 128-bit hex `X-Request-Id` header, propagated through middleware chain and available in logging context
 - **PROXY protocol** — v1 (text) and v2 (binary + TLV extensions), explicit listener mode only, trusted source IP allowlist
 
@@ -150,25 +150,25 @@ stateDiagram-v2
 ## Example
 
 ```c
-#include "core/io_server.h"
-#include "core/io_ctx.h"
+#include "core/ioh_server.h"
+#include "core/ioh_ctx.h"
 
-static int hello(io_ctx_t *c, void *data)
+static int hello(ioh_ctx_t *c, void *data)
 {
     (void)data;
-    return io_ctx_json(c, 200, "{\"message\":\"hello\"}");
+    return ioh_ctx_json(c, 200, "{\"message\":\"hello\"}");
 }
 
 int main(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = 8080;
 
-    io_server_t *srv = io_server_create(&cfg);
-    io_server_set_on_request(srv, hello, nullptr);
-    io_server_run(srv);
-    io_server_destroy(srv);
+    ioh_server_t *srv = ioh_server_create(&cfg);
+    ioh_server_set_on_request(srv, hello, nullptr);
+    ioh_server_run(srv);
+    ioh_server_destroy(srv);
 }
 ```
 

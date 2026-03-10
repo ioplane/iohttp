@@ -86,17 +86,17 @@
 ### 5.2 Linux `io_uring`
 
 - `io_uring(7)`  
-  <https://man7.org/linux/man-pages/man7/io_uring.7.html>
+  <https://man7.org/linux/man-pages/man7/ioh_uring.7.html>
 - `io_uring_setup(2)`  
-  <https://man7.org/linux/man-pages/man2/io_uring_setup.2.html>
+  <https://man7.org/linux/man-pages/man2/ioh_uring_setup.2.html>
 - `io_uring_prep_recv_multishot(3)`  
-  <https://man7.org/linux/man-pages/man3/io_uring_prep_recv_multishot.3.html>
+  <https://man7.org/linux/man-pages/man3/ioh_uring_prep_recv_multishot.3.html>
 - `io_uring_prep_read_multishot(3)`  
-  <https://man7.org/linux/man-pages/man3/io_uring_prep_read_multishot.3.html>
+  <https://man7.org/linux/man-pages/man3/ioh_uring_prep_read_multishot.3.html>
 - `io_uring_prep_send_zc(3)`  
-  <https://man7.org/linux/man-pages/man3/io_uring_prep_send_zc.3.html>
+  <https://man7.org/linux/man-pages/man3/ioh_uring_prep_send_zc.3.html>
 - `io_uring_register_buf_ring(3)`  
-  <https://man7.org/linux/man-pages/man3/io_uring_register_buf_ring.3.html>
+  <https://man7.org/linux/man-pages/man3/ioh_uring_register_buf_ring.3.html>
 
 ### 5.3 Дополнительные спецификации
 
@@ -199,7 +199,7 @@ Single-thread reactor хорош для P0/P1 и отладки, но для pro
 
 - submit recv/send SQE;
 - управление timeout SQE;
-- lifecycle `io_conn_t`;
+- lifecycle `ioh_conn_t`;
 - взаимодействие с TLS object;
 - protocol parser state;
 - переходы state machine.
@@ -491,11 +491,11 @@ HTTP/3 должен быть предусмотрен как отдельный 
 
 Верхние уровни должны работать с единым набором сущностей:
 
-- `io_request_t`;
-- `io_response_t`;
-- `io_conn_info_t`;
-- `io_tls_peer_info_t`;
-- `io_route_match_t`.
+- `ioh_request_t`;
+- `ioh_response_t`;
+- `ioh_conn_info_t`;
+- `ioh_tls_peer_info_t`;
+- `ioh_route_match_t`.
 
 Эти сущности должны быть независимы от:
 
@@ -758,61 +758,61 @@ SSE должен поддерживаться как lightweight streaming respo
 ```text
 iohttp/
   include/iohttp/
-    io_server.h
-    io_request.h
-    io_response.h
-    io_router.h
-    io_middleware.h
-    io_tls.h
-    io_conn.h
-    io_metrics.h
+    ioh_server.h
+    ioh_request.h
+    ioh_response.h
+    ioh_router.h
+    ioh_middleware.h
+    ioh_tls.h
+    ioh_conn.h
+    ioh_metrics.h
 
   src/core/
-    io_loop.c
-    io_worker.c
-    io_conn.c
-    io_timeout.c
-    io_buffer.c
-    io_fdreg.c
+    ioh_loop.c
+    ioh_worker.c
+    ioh_conn.c
+    ioh_timeout.c
+    ioh_buffer.c
+    ioh_fdreg.c
 
   src/net/
-    io_listener.c
-    io_accept.c
-    io_socket.c
-    io_proxy_proto.c
+    ioh_listener.c
+    ioh_accept.c
+    ioh_socket.c
+    ioh_proxy_proto.c
 
   src/tls/
-    io_tls_wolfssl.c
-    io_tls_peer.c
-    io_tls_alpn.c
+    ioh_tls_wolfssl.c
+    ioh_tls_peer.c
+    ioh_tls_alpn.c
 
   src/http/
-    io_http1.c
-    io_http2.c
-    io_http3.c
-    io_request.c
-    io_response.c
+    ioh_http1.c
+    ioh_http2.c
+    ioh_http3.c
+    ioh_request.c
+    ioh_response.c
 
   src/router/
-    io_router.c
-    io_route_group.c
+    ioh_router.c
+    ioh_route_group.c
 
   src/middleware/
-    io_logging.c
-    io_metrics.c
-    io_auth.c
-    io_cors.c
-    io_security.c
-    io_oas.c
+    ioh_logging.c
+    ioh_metrics.c
+    ioh_auth.c
+    ioh_cors.c
+    ioh_security.c
+    ioh_oas.c
 
   src/static/
-    io_static.c
-    io_spa.c
-    io_compress.c
+    ioh_static.c
+    ioh_spa.c
+    ioh_compress.c
 
   src/ws/
-    io_websocket.c
-    io_sse.c
+    ioh_websocket.c
+    ioh_sse.c
 
   tests/
 ```

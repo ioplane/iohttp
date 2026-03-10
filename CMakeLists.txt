@@ -116,7 +116,7 @@ if(BUILD_TESTING)
     endif()
 
     # Test helper macro
-    macro(io_add_test TEST_NAME TEST_SRC)
+    macro(ioh_add_test TEST_NAME TEST_SRC)
         if(TARGET unity)
             add_executable(${TEST_NAME} ${TEST_SRC})
             target_include_directories(${TEST_NAME} PRIVATE
@@ -235,7 +235,7 @@ endif()
 # Fuzz Testing (Clang only)
 # ============================================================================
 
-macro(io_add_fuzz FUZZ_NAME FUZZ_SRC)
+macro(ioh_add_fuzz FUZZ_NAME FUZZ_SRC)
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         add_executable(${FUZZ_NAME} ${FUZZ_SRC})
         target_include_directories(${FUZZ_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -260,123 +260,123 @@ endmacro()
 # Sprint 1: Core io_uring event loop
 # ============================================================================
 
-add_library(io_loop STATIC src/core/io_loop.c)
-target_include_directories(io_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_include_directories(io_loop PUBLIC ${LIBURING_INCLUDE_DIRS})
-target_link_directories(io_loop PUBLIC ${LIBURING_LIBRARY_DIRS})
-target_link_libraries(io_loop PUBLIC ${LIBURING_LIBRARIES})
+add_library(ioh_loop STATIC src/core/ioh_loop.c)
+target_include_directories(ioh_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ioh_loop PUBLIC ${LIBURING_INCLUDE_DIRS})
+target_link_directories(ioh_loop PUBLIC ${LIBURING_LIBRARY_DIRS})
+target_link_libraries(ioh_loop PUBLIC ${LIBURING_LIBRARIES})
 
-io_add_test(test_io_loop tests/unit/test_io_loop.c io_loop)
+ioh_add_test(test_ioh_loop tests/unit/test_ioh_loop.c ioh_loop)
 
 # ============================================================================
 # Sprint 1: Connection state machine and pool
 # ============================================================================
 
-add_library(io_conn STATIC src/core/io_conn.c)
-target_include_directories(io_conn PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_conn STATIC src/core/ioh_conn.c)
+target_include_directories(ioh_conn PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_conn tests/unit/test_io_conn.c io_conn)
+ioh_add_test(test_ioh_conn tests/unit/test_ioh_conn.c ioh_conn)
 
 # ============================================================================
 # Sprint 12: Structured logging
 # ============================================================================
 
-add_library(io_log STATIC src/core/io_log.c)
-target_include_directories(io_log PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_log STATIC src/core/ioh_log.c)
+target_include_directories(ioh_log PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_log tests/unit/test_io_log.c io_log)
+ioh_add_test(test_ioh_log tests/unit/test_ioh_log.c ioh_log)
 
 # ============================================================================
 # Sprint 15: Health check endpoint framework
 # ============================================================================
 
-add_library(io_health STATIC src/core/io_health.c)
-target_include_directories(io_health PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_health PUBLIC io_router io_ctx io_request io_response)
+add_library(ioh_health STATIC src/core/ioh_health.c)
+target_include_directories(ioh_health PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_health PUBLIC ioh_router ioh_ctx ioh_request ioh_response)
 if(YYJSON_INCLUDE_DIR AND YYJSON_LIBRARY)
-    target_include_directories(io_health PRIVATE ${YYJSON_INCLUDE_DIR})
-    target_link_libraries(io_health PRIVATE ${YYJSON_LIBRARY})
-    target_compile_definitions(io_health PRIVATE IOHTTP_HAVE_YYJSON)
+    target_include_directories(ioh_health PRIVATE ${YYJSON_INCLUDE_DIR})
+    target_link_libraries(ioh_health PRIVATE ${YYJSON_LIBRARY})
+    target_compile_definitions(ioh_health PRIVATE IOHTTP_HAVE_YYJSON)
 endif()
 
 # Test uses a separate object without yyjson to avoid PIC issues with static yyjson
 if(BUILD_TESTING AND TARGET unity)
-    add_library(io_health_test STATIC src/core/io_health.c)
-    target_include_directories(io_health_test PUBLIC ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(io_health_test PUBLIC io_router io_ctx io_request io_response)
-    io_add_test(test_io_health tests/unit/test_io_health.c io_health_test io_server io_router io_radix io_ctx io_request io_response)
+    add_library(ioh_health_test STATIC src/core/ioh_health.c)
+    target_include_directories(ioh_health_test PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(ioh_health_test PUBLIC ioh_router ioh_ctx ioh_request ioh_response)
+    ioh_add_test(test_ioh_health tests/unit/test_ioh_health.c ioh_health_test ioh_server ioh_router ioh_radix ioh_ctx ioh_request ioh_response)
 endif()
 
 # Sprint 15: Per-route timeout tests
-io_add_test(test_io_route_timeout tests/unit/test_io_route_timeout.c
-    io_router io_radix io_ctx io_request io_response)
+ioh_add_test(test_ioh_route_timeout tests/unit/test_ioh_route_timeout.c
+    ioh_router ioh_radix ioh_ctx ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 1: Server lifecycle management
 # ============================================================================
 
-add_library(io_server STATIC src/core/io_server.c)
-target_include_directories(io_server PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_server PUBLIC io_loop io_conn io_ctx io_http1 io_request io_response io_router io_middleware io_tls io_log io_proxy_proto)
+add_library(ioh_server STATIC src/core/ioh_server.c)
+target_include_directories(ioh_server PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_server PUBLIC ioh_loop ioh_conn ioh_ctx ioh_http1 ioh_request ioh_response ioh_router ioh_middleware ioh_tls ioh_log ioh_proxy_proto)
 
-io_add_test(test_io_server tests/unit/test_io_server.c io_server io_loop io_conn)
+ioh_add_test(test_ioh_server tests/unit/test_ioh_server.c ioh_server ioh_loop ioh_conn)
 
 # ============================================================================
 # Sprint 16: Cookie handling (RFC 6265bis)
 # ============================================================================
 
-add_library(io_cookie STATIC src/http/io_cookie.c)
-target_include_directories(io_cookie PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_cookie STATIC src/http/ioh_cookie.c)
+target_include_directories(ioh_cookie PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 # ============================================================================
 # Sprint 8: Unified request context
 # ============================================================================
 
-add_library(io_ctx STATIC src/core/io_ctx.c)
-target_include_directories(io_ctx PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_ctx PUBLIC io_request io_response io_cookie)
+add_library(ioh_ctx STATIC src/core/ioh_ctx.c)
+target_include_directories(ioh_ctx PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_ctx PUBLIC ioh_request ioh_response ioh_cookie)
 
-io_add_test(test_io_ctx tests/unit/test_io_ctx.c io_ctx io_request io_response)
+ioh_add_test(test_ioh_ctx tests/unit/test_ioh_ctx.c ioh_ctx ioh_request ioh_response)
 
 # Sprint 16: Cookie tests
-io_add_test(test_io_cookie tests/unit/test_io_cookie.c
-    io_cookie io_ctx io_request io_response)
+ioh_add_test(test_ioh_cookie tests/unit/test_ioh_cookie.c
+    ioh_cookie ioh_ctx ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 1: Buffer pool management
 # ============================================================================
 
-add_library(io_buffer STATIC src/core/io_buffer.c)
-target_include_directories(io_buffer PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_include_directories(io_buffer PUBLIC ${LIBURING_INCLUDE_DIRS})
-target_link_directories(io_buffer PUBLIC ${LIBURING_LIBRARY_DIRS})
-target_link_libraries(io_buffer PUBLIC ${LIBURING_LIBRARIES})
+add_library(ioh_buffer STATIC src/core/ioh_buffer.c)
+target_include_directories(ioh_buffer PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ioh_buffer PUBLIC ${LIBURING_INCLUDE_DIRS})
+target_link_directories(ioh_buffer PUBLIC ${LIBURING_LIBRARY_DIRS})
+target_link_libraries(ioh_buffer PUBLIC ${LIBURING_LIBRARIES})
 
-io_add_test(test_io_buffer tests/unit/test_io_buffer.c io_buffer)
+ioh_add_test(test_ioh_buffer tests/unit/test_ioh_buffer.c ioh_buffer)
 
 # ============================================================================
 # Sprint 2: wolfSSL TLS integration
 # ============================================================================
 
-add_library(io_tls STATIC src/tls/io_tls.c)
-target_include_directories(io_tls PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_include_directories(io_tls PUBLIC ${WOLFSSL_INCLUDE_DIRS})
-target_link_directories(io_tls PUBLIC ${WOLFSSL_LIBRARY_DIRS})
-target_link_libraries(io_tls PUBLIC ${WOLFSSL_LIBRARIES})
+add_library(ioh_tls STATIC src/tls/ioh_tls.c)
+target_include_directories(ioh_tls PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ioh_tls PUBLIC ${WOLFSSL_INCLUDE_DIRS})
+target_link_directories(ioh_tls PUBLIC ${WOLFSSL_LIBRARY_DIRS})
+target_link_libraries(ioh_tls PUBLIC ${WOLFSSL_LIBRARIES})
 
 if(BUILD_TESTING AND TARGET unity)
-    add_executable(test_io_tls tests/unit/test_io_tls.c)
-    target_include_directories(test_io_tls PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_include_directories(test_io_tls PRIVATE ${WOLFSSL_INCLUDE_DIRS})
-    target_link_directories(test_io_tls PRIVATE ${WOLFSSL_LIBRARY_DIRS})
-    target_link_libraries(test_io_tls PRIVATE unity io_tls ${WOLFSSL_LIBRARIES})
-    target_compile_options(test_io_tls PRIVATE
+    add_executable(test_ioh_tls tests/unit/test_ioh_tls.c)
+    target_include_directories(test_ioh_tls PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(test_ioh_tls PRIVATE ${WOLFSSL_INCLUDE_DIRS})
+    target_link_directories(test_ioh_tls PRIVATE ${WOLFSSL_LIBRARY_DIRS})
+    target_link_libraries(test_ioh_tls PRIVATE unity ioh_tls ${WOLFSSL_LIBRARIES})
+    target_compile_options(test_ioh_tls PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
     )
-    target_compile_definitions(test_io_tls PRIVATE
+    target_compile_definitions(test_ioh_tls PRIVATE
         TEST_CERTS_DIR="${CMAKE_SOURCE_DIR}/tests/certs"
     )
-    add_test(NAME test_io_tls COMMAND test_io_tls)
+    add_test(NAME test_ioh_tls COMMAND test_ioh_tls)
 endif()
 
 # ============================================================================
@@ -388,7 +388,7 @@ if(BUILD_TESTING AND TARGET unity)
     target_include_directories(test_tls_uring PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_include_directories(test_tls_uring PRIVATE ${WOLFSSL_INCLUDE_DIRS})
     target_link_directories(test_tls_uring PRIVATE ${WOLFSSL_LIBRARY_DIRS})
-    target_link_libraries(test_tls_uring PRIVATE unity io_tls ${WOLFSSL_LIBRARIES})
+    target_link_libraries(test_tls_uring PRIVATE unity ioh_tls ${WOLFSSL_LIBRARIES})
     target_compile_options(test_tls_uring PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
     )
@@ -402,39 +402,39 @@ endif()
 # Sprint 3: HTTP/1.1 request/response abstractions
 # ============================================================================
 
-add_library(io_request STATIC src/http/io_request.c)
-target_include_directories(io_request PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_request STATIC src/http/ioh_request.c)
+target_include_directories(ioh_request PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-add_library(io_response STATIC src/http/io_response.c)
-target_include_directories(io_response PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_response STATIC src/http/ioh_response.c)
+target_include_directories(ioh_response PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_request tests/unit/test_io_request.c io_request)
-io_add_test(test_io_response tests/unit/test_io_response.c io_response)
+ioh_add_test(test_ioh_request tests/unit/test_ioh_request.c ioh_request)
+ioh_add_test(test_ioh_response tests/unit/test_ioh_response.c ioh_response)
 
 # Sprint 16: Vary header tests
-io_add_test(test_io_vary tests/unit/test_io_vary.c
-    io_response io_request)
+ioh_add_test(test_ioh_vary tests/unit/test_ioh_vary.c
+    ioh_response ioh_request)
 
 # ============================================================================
 # Sprint 3: HTTP/1.1 parser (picohttpparser)
 # ============================================================================
 
-add_library(io_http1 STATIC src/http/io_http1.c src/http/picohttpparser.c)
-target_include_directories(io_http1 PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_http1 PUBLIC io_request)
+add_library(ioh_http1 STATIC src/http/ioh_http1.c src/http/picohttpparser.c)
+target_include_directories(ioh_http1 PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_http1 PUBLIC ioh_request)
 # picohttpparser uses pointer arithmetic that triggers sign-conversion warnings
-target_compile_options(io_http1 PRIVATE -Wno-sign-conversion -Wno-conversion -Wno-undef)
+target_compile_options(ioh_http1 PRIVATE -Wno-sign-conversion -Wno-conversion -Wno-undef)
 
-io_add_test(test_io_http1 tests/unit/test_io_http1.c io_http1 io_request io_response)
+ioh_add_test(test_ioh_http1 tests/unit/test_ioh_http1.c ioh_http1 ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 3: PROXY protocol decoder
 # ============================================================================
 
-add_library(io_proxy_proto STATIC src/http/io_proxy_proto.c)
-target_include_directories(io_proxy_proto PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_proxy_proto STATIC src/http/ioh_proxy_proto.c)
+target_include_directories(ioh_proxy_proto PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_proxy_proto tests/unit/test_proxy_proto.c io_proxy_proto)
+ioh_add_test(test_proxy_proto tests/unit/test_proxy_proto.c ioh_proxy_proto)
 
 # ============================================================================
 # Sprint 3: HTTP/1.1 integration tests
@@ -446,7 +446,7 @@ if(BUILD_TESTING AND TARGET unity)
     target_include_directories(test_http1_server PRIVATE ${WOLFSSL_INCLUDE_DIRS})
     target_link_directories(test_http1_server PRIVATE ${WOLFSSL_LIBRARY_DIRS})
     target_link_libraries(test_http1_server PRIVATE
-        unity io_http1 io_request io_response io_proxy_proto io_tls ${WOLFSSL_LIBRARIES}
+        unity ioh_http1 ioh_request ioh_response ioh_proxy_proto ioh_tls ${WOLFSSL_LIBRARIES}
     )
     target_compile_options(test_http1_server PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -461,131 +461,131 @@ endif()
 # Sprint 4: Radix trie (internal)
 # ============================================================================
 
-add_library(io_radix STATIC src/router/io_radix.c)
-target_include_directories(io_radix PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_radix STATIC src/router/ioh_radix.c)
+target_include_directories(ioh_radix PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_radix tests/unit/test_io_radix.c io_radix io_request)
+ioh_add_test(test_ioh_radix tests/unit/test_ioh_radix.c ioh_radix ioh_request)
 
 # ============================================================================
 # Sprint 4: Router public API
 # ============================================================================
 
-add_library(io_router STATIC src/router/io_router.c)
-target_include_directories(io_router PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_router PUBLIC io_radix io_request io_ctx)
+add_library(ioh_router STATIC src/router/ioh_router.c)
+target_include_directories(ioh_router PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_router PUBLIC ioh_radix ioh_request ioh_ctx)
 
-io_add_test(test_io_router tests/unit/test_io_router.c io_router io_radix io_request io_response io_ctx)
+ioh_add_test(test_ioh_router tests/unit/test_ioh_router.c ioh_router ioh_radix ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 4: Route groups
 # ============================================================================
 
-add_library(io_route_group STATIC src/router/io_route_group.c)
-target_include_directories(io_route_group PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_route_group PUBLIC io_router)
+add_library(ioh_route_group STATIC src/router/ioh_route_group.c)
+target_include_directories(ioh_route_group PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_route_group PUBLIC ioh_router)
 
-io_add_test(test_io_route_group tests/unit/test_io_route_group.c io_route_group io_router io_radix io_request io_response io_ctx)
+ioh_add_test(test_ioh_route_group tests/unit/test_ioh_route_group.c ioh_route_group ioh_router ioh_radix ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 4: Typed parameter extraction
 # ============================================================================
 
-io_add_test(test_io_params tests/unit/test_io_params.c io_request)
+ioh_add_test(test_ioh_params tests/unit/test_ioh_params.c ioh_request)
 
 # ============================================================================
 # Sprint 4: Route introspection
 # ============================================================================
 
-add_library(io_route_inspect STATIC src/router/io_route_inspect.c)
-target_include_directories(io_route_inspect PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_route_inspect PUBLIC io_router io_radix)
+add_library(ioh_route_inspect STATIC src/router/ioh_route_inspect.c)
+target_include_directories(ioh_route_inspect PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_route_inspect PUBLIC ioh_router ioh_radix)
 
-io_add_test(test_io_route_inspect tests/unit/test_io_route_inspect.c io_route_inspect io_route_meta io_router io_route_group io_radix io_request io_response io_ctx)
+ioh_add_test(test_ioh_route_inspect tests/unit/test_ioh_route_inspect.c ioh_route_inspect ioh_route_meta ioh_router ioh_route_group ioh_radix ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 9: Route metadata
 # ============================================================================
 
-add_library(io_route_meta STATIC src/router/io_route_meta.c)
-target_include_directories(io_route_meta PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_route_meta STATIC src/router/ioh_route_meta.c)
+target_include_directories(ioh_route_meta PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_route_meta tests/unit/test_io_route_meta.c io_route_meta io_route_inspect io_router io_radix io_request io_response io_ctx)
+ioh_add_test(test_ioh_route_meta tests/unit/test_ioh_route_meta.c ioh_route_meta ioh_route_inspect ioh_router ioh_radix ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 16: Virtual host routing
 # ============================================================================
 
-add_library(io_vhost STATIC src/router/io_vhost.c)
-target_include_directories(io_vhost PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_vhost PUBLIC io_router)
+add_library(ioh_vhost STATIC src/router/ioh_vhost.c)
+target_include_directories(ioh_vhost PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_vhost PUBLIC ioh_router)
 
-io_add_test(test_io_vhost tests/unit/test_io_vhost.c
-    io_vhost io_router io_radix io_ctx io_request io_response)
+ioh_add_test(test_ioh_vhost tests/unit/test_ioh_vhost.c
+    ioh_vhost ioh_router ioh_radix ioh_ctx ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 4: Middleware chain
 # ============================================================================
 
-add_library(io_middleware STATIC src/middleware/io_middleware.c)
-target_include_directories(io_middleware PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_middleware PUBLIC io_router io_route_group io_request io_response io_ctx)
+add_library(ioh_middleware STATIC src/middleware/ioh_middleware.c)
+target_include_directories(ioh_middleware PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_middleware PUBLIC ioh_router ioh_route_group ioh_request ioh_response ioh_ctx)
 
-io_add_test(test_io_middleware tests/unit/test_io_middleware.c io_middleware io_router io_route_group io_radix io_request io_response io_ctx)
+ioh_add_test(test_ioh_middleware tests/unit/test_ioh_middleware.c ioh_middleware ioh_router ioh_route_group ioh_radix ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 4: Built-in middleware modules
 # ============================================================================
 
-add_library(io_cors STATIC src/middleware/io_cors.c)
-target_include_directories(io_cors PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_cors PUBLIC io_request io_response io_ctx)
+add_library(ioh_cors STATIC src/middleware/ioh_cors.c)
+target_include_directories(ioh_cors PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_cors PUBLIC ioh_request ioh_response ioh_ctx)
 
-add_library(io_ratelimit STATIC src/middleware/io_ratelimit.c)
-target_include_directories(io_ratelimit PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_ratelimit PUBLIC io_request io_response io_ctx)
+add_library(ioh_ratelimit STATIC src/middleware/ioh_ratelimit.c)
+target_include_directories(ioh_ratelimit PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_ratelimit PUBLIC ioh_request ioh_response ioh_ctx)
 
-add_library(io_security STATIC src/middleware/io_security.c)
-target_include_directories(io_security PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_security PUBLIC io_request io_response io_ctx)
+add_library(ioh_security STATIC src/middleware/ioh_security.c)
+target_include_directories(ioh_security PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_security PUBLIC ioh_request ioh_response ioh_ctx)
 
-add_library(io_auth STATIC src/middleware/io_auth.c)
-target_include_directories(io_auth PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_auth PUBLIC io_request io_response io_ctx)
+add_library(ioh_auth STATIC src/middleware/ioh_auth.c)
+target_include_directories(ioh_auth PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_auth PUBLIC ioh_request ioh_response ioh_ctx)
 
-io_add_test(test_io_cors tests/unit/test_io_cors.c io_cors io_request io_response io_ctx)
-io_add_test(test_io_ratelimit tests/unit/test_io_ratelimit.c io_ratelimit io_request io_response io_ctx)
-io_add_test(test_io_security tests/unit/test_io_security.c io_security io_request io_response io_ctx)
-io_add_test(test_io_auth tests/unit/test_io_auth.c io_auth io_request io_response io_ctx)
+ioh_add_test(test_ioh_cors tests/unit/test_ioh_cors.c ioh_cors ioh_request ioh_response ioh_ctx)
+ioh_add_test(test_ioh_ratelimit tests/unit/test_ioh_ratelimit.c ioh_ratelimit ioh_request ioh_response ioh_ctx)
+ioh_add_test(test_ioh_security tests/unit/test_ioh_security.c ioh_security ioh_request ioh_response ioh_ctx)
+ioh_add_test(test_ioh_auth tests/unit/test_ioh_auth.c ioh_auth ioh_request ioh_response ioh_ctx)
 
 # ============================================================================
 # Sprint 5: Static file server
 # ============================================================================
 
-add_library(io_static STATIC src/static/io_static.c)
-target_include_directories(io_static PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_static PUBLIC io_request io_response)
+add_library(ioh_static STATIC src/static/ioh_static.c)
+target_include_directories(ioh_static PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_static PUBLIC ioh_request ioh_response)
 
-io_add_test(test_io_static tests/unit/test_io_static.c io_static io_request io_response)
+ioh_add_test(test_ioh_static tests/unit/test_ioh_static.c ioh_static ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 5: Multipart parser
 # ============================================================================
 
-add_library(io_multipart STATIC src/http/io_multipart.c)
-target_include_directories(io_multipart PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_multipart PUBLIC io_request)
+add_library(ioh_multipart STATIC src/http/ioh_multipart.c)
+target_include_directories(ioh_multipart PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_multipart PUBLIC ioh_request)
 
-io_add_test(test_io_multipart tests/unit/test_io_multipart.c io_multipart io_request)
+ioh_add_test(test_ioh_multipart tests/unit/test_ioh_multipart.c ioh_multipart ioh_request)
 
 # ============================================================================
 # Sprint 5: SPA fallback
 # ============================================================================
 
-add_library(io_spa STATIC src/static/io_spa.c)
-target_include_directories(io_spa PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_spa PUBLIC io_static io_request io_response)
+add_library(ioh_spa STATIC src/static/ioh_spa.c)
+target_include_directories(ioh_spa PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_spa PUBLIC ioh_static ioh_request ioh_response)
 
-io_add_test(test_io_spa tests/unit/test_io_spa.c io_spa io_static io_request io_response)
+ioh_add_test(test_ioh_spa tests/unit/test_ioh_spa.c ioh_spa ioh_static ioh_request ioh_response)
 
 # ============================================================================
 # Sprint 5: Compression
@@ -595,38 +595,38 @@ io_add_test(test_io_spa tests/unit/test_io_spa.c io_spa io_static io_request io_
 pkg_check_modules(ZLIB zlib)
 pkg_check_modules(BROTLI_ENC libbrotlienc)
 
-add_library(io_compress STATIC src/static/io_compress.c)
-target_include_directories(io_compress PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_compress PUBLIC io_request io_response)
+add_library(ioh_compress STATIC src/static/ioh_compress.c)
+target_include_directories(ioh_compress PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_compress PUBLIC ioh_request ioh_response)
 
 if(ZLIB_FOUND)
-    target_compile_definitions(io_compress PRIVATE IOHTTP_HAVE_ZLIB)
-    target_include_directories(io_compress PRIVATE ${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(io_compress PRIVATE ${ZLIB_LIBRARIES})
+    target_compile_definitions(ioh_compress PRIVATE IOHTTP_HAVE_ZLIB)
+    target_include_directories(ioh_compress PRIVATE ${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(ioh_compress PRIVATE ${ZLIB_LIBRARIES})
 endif()
 
 if(BROTLI_ENC_FOUND)
-    target_compile_definitions(io_compress PRIVATE IOHTTP_HAVE_BROTLI)
-    target_include_directories(io_compress PRIVATE ${BROTLI_ENC_INCLUDE_DIRS})
-    target_link_libraries(io_compress PRIVATE ${BROTLI_ENC_LIBRARIES})
+    target_compile_definitions(ioh_compress PRIVATE IOHTTP_HAVE_BROTLI)
+    target_include_directories(ioh_compress PRIVATE ${BROTLI_ENC_INCLUDE_DIRS})
+    target_link_libraries(ioh_compress PRIVATE ${BROTLI_ENC_LIBRARIES})
 endif()
 
-io_add_test(test_io_compress tests/unit/test_io_compress.c io_compress io_request io_response)
+ioh_add_test(test_ioh_compress tests/unit/test_ioh_compress.c ioh_compress ioh_request ioh_response)
 if(ZLIB_FOUND)
-    target_compile_definitions(test_io_compress PRIVATE IOHTTP_HAVE_ZLIB)
+    target_compile_definitions(test_ioh_compress PRIVATE IOHTTP_HAVE_ZLIB)
 endif()
 if(BROTLI_ENC_FOUND)
-    target_compile_definitions(test_io_compress PRIVATE IOHTTP_HAVE_BROTLI)
+    target_compile_definitions(test_ioh_compress PRIVATE IOHTTP_HAVE_BROTLI)
 endif()
 
 # ============================================================================
 # Sprint 6: Server-Sent Events
 # ============================================================================
 
-add_library(io_sse STATIC src/ws/io_sse.c)
-target_include_directories(io_sse PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_sse STATIC src/ws/ioh_sse.c)
+target_include_directories(ioh_sse PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-io_add_test(test_io_sse tests/unit/test_io_sse.c io_sse)
+ioh_add_test(test_ioh_sse tests/unit/test_ioh_sse.c ioh_sse)
 
 # ============================================================================
 # Sprint 6: WebSocket (RFC 6455, wslay-backed)
@@ -636,17 +636,17 @@ io_add_test(test_io_sse tests/unit/test_io_sse.c io_sse)
 find_path(WSLAY_INCLUDE_DIR NAMES wslay/wslay.h)
 find_library(WSLAY_LIBRARY NAMES wslay)
 
-add_library(io_websocket STATIC src/ws/io_websocket.c)
-target_include_directories(io_websocket PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_include_directories(io_websocket PUBLIC ${WOLFSSL_INCLUDE_DIRS})
-target_link_directories(io_websocket PUBLIC ${WOLFSSL_LIBRARY_DIRS})
-target_link_libraries(io_websocket PUBLIC ${WOLFSSL_LIBRARIES})
+add_library(ioh_websocket STATIC src/ws/ioh_websocket.c)
+target_include_directories(ioh_websocket PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ioh_websocket PUBLIC ${WOLFSSL_INCLUDE_DIRS})
+target_link_directories(ioh_websocket PUBLIC ${WOLFSSL_LIBRARY_DIRS})
+target_link_libraries(ioh_websocket PUBLIC ${WOLFSSL_LIBRARIES})
 if(WSLAY_INCLUDE_DIR AND WSLAY_LIBRARY)
-    target_include_directories(io_websocket PUBLIC ${WSLAY_INCLUDE_DIR})
-    target_link_libraries(io_websocket PUBLIC ${WSLAY_LIBRARY})
+    target_include_directories(ioh_websocket PUBLIC ${WSLAY_INCLUDE_DIR})
+    target_link_libraries(ioh_websocket PUBLIC ${WSLAY_LIBRARY})
 endif()
 
-io_add_test(test_io_websocket tests/unit/test_io_websocket.c io_websocket)
+ioh_add_test(test_ioh_websocket tests/unit/test_ioh_websocket.c ioh_websocket)
 
 # ============================================================================
 # Sprint 7: HTTP/2 (nghttp2)
@@ -655,27 +655,27 @@ io_add_test(test_io_websocket tests/unit/test_io_websocket.c io_websocket)
 find_path(NGHTTP2_INCLUDE_DIR NAMES nghttp2/nghttp2.h)
 find_library(NGHTTP2_LIBRARY NAMES nghttp2)
 
-add_library(io_http2 STATIC src/http/io_http2.c)
-target_include_directories(io_http2 PUBLIC ${CMAKE_SOURCE_DIR}/src)
+add_library(ioh_http2 STATIC src/http/ioh_http2.c)
+target_include_directories(ioh_http2 PUBLIC ${CMAKE_SOURCE_DIR}/src)
 if(NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
-    target_include_directories(io_http2 PUBLIC ${NGHTTP2_INCLUDE_DIR})
-    target_link_libraries(io_http2 PUBLIC ${NGHTTP2_LIBRARY})
+    target_include_directories(ioh_http2 PUBLIC ${NGHTTP2_INCLUDE_DIR})
+    target_link_libraries(ioh_http2 PUBLIC ${NGHTTP2_LIBRARY})
 endif()
-target_link_libraries(io_http2 PUBLIC io_request io_response io_ctx)
+target_link_libraries(ioh_http2 PUBLIC ioh_request ioh_response ioh_ctx)
 
 if(BUILD_TESTING AND TARGET unity AND NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
-    add_executable(test_io_http2 tests/unit/test_io_http2.c)
-    target_include_directories(test_io_http2 PRIVATE
+    add_executable(test_ioh_http2 tests/unit/test_ioh_http2.c)
+    target_include_directories(test_ioh_http2 PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${NGHTTP2_INCLUDE_DIR}
     )
-    target_link_libraries(test_io_http2 PRIVATE
-        unity io_http2 io_request io_response ${NGHTTP2_LIBRARY}
+    target_link_libraries(test_ioh_http2 PRIVATE
+        unity ioh_http2 ioh_request ioh_response ${NGHTTP2_LIBRARY}
     )
-    target_compile_options(test_io_http2 PRIVATE
+    target_compile_options(test_ioh_http2 PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
     )
-    add_test(NAME test_io_http2 COMMAND test_io_http2)
+    add_test(NAME test_ioh_http2 COMMAND test_ioh_http2)
 endif()
 
 # Sprint 7: HTTP/2 ALPN protocol selection integration tests
@@ -686,7 +686,7 @@ if(BUILD_TESTING AND TARGET unity AND NGHTTP2_INCLUDE_DIR AND NGHTTP2_LIBRARY)
     target_include_directories(test_http2_server PRIVATE ${NGHTTP2_INCLUDE_DIR})
     target_link_directories(test_http2_server PRIVATE ${WOLFSSL_LIBRARY_DIRS})
     target_link_libraries(test_http2_server PRIVATE
-        unity io_http2 io_http1 io_tls io_request io_response
+        unity ioh_http2 ioh_http1 ioh_tls ioh_request ioh_response
         ${WOLFSSL_LIBRARIES} ${NGHTTP2_LIBRARY}
     )
     target_compile_options(test_http2_server PRIVATE
@@ -703,19 +703,19 @@ endif()
 # ============================================================================
 
 if(NGTCP2_FOUND AND NGTCP2_WOLFSSL_FOUND)
-    add_library(io_quic STATIC src/http/io_quic.c)
-    target_include_directories(io_quic PUBLIC ${CMAKE_SOURCE_DIR}/src)
-    target_include_directories(io_quic PUBLIC
+    add_library(ioh_quic STATIC src/http/ioh_quic.c)
+    target_include_directories(ioh_quic PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(ioh_quic PUBLIC
         ${NGTCP2_INCLUDE_DIRS}
         ${NGTCP2_WOLFSSL_INCLUDE_DIRS}
         ${WOLFSSL_INCLUDE_DIRS}
     )
-    target_link_directories(io_quic PUBLIC
+    target_link_directories(ioh_quic PUBLIC
         ${NGTCP2_LIBRARY_DIRS}
         ${NGTCP2_WOLFSSL_LIBRARY_DIRS}
         ${WOLFSSL_LIBRARY_DIRS}
     )
-    target_link_libraries(io_quic PUBLIC
+    target_link_libraries(ioh_quic PUBLIC
         ${NGTCP2_LIBRARIES}
         ${NGTCP2_WOLFSSL_LIBRARIES}
         ${WOLFSSL_LIBRARIES}
@@ -723,31 +723,31 @@ if(NGTCP2_FOUND AND NGTCP2_WOLFSSL_FOUND)
     message(STATUS "QUIC transport enabled (ngtcp2 + wolfSSL)")
 
     if(BUILD_TESTING AND TARGET unity)
-        add_executable(test_io_quic tests/unit/test_io_quic.c)
-        target_include_directories(test_io_quic PRIVATE ${CMAKE_SOURCE_DIR}/src)
-        target_include_directories(test_io_quic PRIVATE
+        add_executable(test_ioh_quic tests/unit/test_ioh_quic.c)
+        target_include_directories(test_ioh_quic PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_include_directories(test_ioh_quic PRIVATE
             ${NGTCP2_INCLUDE_DIRS}
             ${NGTCP2_WOLFSSL_INCLUDE_DIRS}
             ${WOLFSSL_INCLUDE_DIRS}
         )
-        target_link_directories(test_io_quic PRIVATE
+        target_link_directories(test_ioh_quic PRIVATE
             ${NGTCP2_LIBRARY_DIRS}
             ${NGTCP2_WOLFSSL_LIBRARY_DIRS}
             ${WOLFSSL_LIBRARY_DIRS}
         )
-        target_link_libraries(test_io_quic PRIVATE
-            unity io_quic
+        target_link_libraries(test_ioh_quic PRIVATE
+            unity ioh_quic
             ${NGTCP2_LIBRARIES}
             ${NGTCP2_WOLFSSL_LIBRARIES}
             ${WOLFSSL_LIBRARIES}
         )
-        target_compile_options(test_io_quic PRIVATE
+        target_compile_options(test_ioh_quic PRIVATE
             -Wno-missing-prototypes -Wno-missing-declarations
         )
-        target_compile_definitions(test_io_quic PRIVATE
+        target_compile_definitions(test_ioh_quic PRIVATE
             TEST_CERTS_DIR="${CMAKE_SOURCE_DIR}/tests/certs"
         )
-        add_test(NAME test_io_quic COMMAND test_io_quic)
+        add_test(NAME test_ioh_quic COMMAND test_ioh_quic)
     endif()
 else()
     message(STATUS "QUIC transport disabled (ngtcp2 or ngtcp2_crypto_wolfssl not found)")
@@ -757,47 +757,47 @@ endif()
 # Sprint 10: HTTP/3 session (nghttp3)
 # ============================================================================
 
-if(NGHTTP3_FOUND AND TARGET io_quic)
-    add_library(io_http3 STATIC src/http/io_http3.c)
-    target_include_directories(io_http3 PUBLIC ${CMAKE_SOURCE_DIR}/src)
-    target_include_directories(io_http3 PUBLIC ${NGHTTP3_INCLUDE_DIRS})
-    target_link_directories(io_http3 PUBLIC ${NGHTTP3_LIBRARY_DIRS})
-    target_link_libraries(io_http3 PUBLIC ${NGHTTP3_LIBRARIES} io_quic io_request io_response io_ctx)
+if(NGHTTP3_FOUND AND TARGET ioh_quic)
+    add_library(ioh_http3 STATIC src/http/ioh_http3.c)
+    target_include_directories(ioh_http3 PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(ioh_http3 PUBLIC ${NGHTTP3_INCLUDE_DIRS})
+    target_link_directories(ioh_http3 PUBLIC ${NGHTTP3_LIBRARY_DIRS})
+    target_link_libraries(ioh_http3 PUBLIC ${NGHTTP3_LIBRARIES} ioh_quic ioh_request ioh_response ioh_ctx)
     message(STATUS "HTTP/3 enabled (nghttp3)")
 
     if(BUILD_TESTING AND TARGET unity)
-        add_executable(test_io_http3 tests/unit/test_io_http3.c)
-        target_include_directories(test_io_http3 PRIVATE ${CMAKE_SOURCE_DIR}/src)
-        target_include_directories(test_io_http3 PRIVATE ${NGHTTP3_INCLUDE_DIRS})
-        target_link_directories(test_io_http3 PRIVATE ${NGHTTP3_LIBRARY_DIRS})
-        target_link_libraries(test_io_http3 PRIVATE
-            unity io_http3 io_quic io_request io_response io_ctx
+        add_executable(test_ioh_http3 tests/unit/test_ioh_http3.c)
+        target_include_directories(test_ioh_http3 PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_include_directories(test_ioh_http3 PRIVATE ${NGHTTP3_INCLUDE_DIRS})
+        target_link_directories(test_ioh_http3 PRIVATE ${NGHTTP3_LIBRARY_DIRS})
+        target_link_libraries(test_ioh_http3 PRIVATE
+            unity ioh_http3 ioh_quic ioh_request ioh_response ioh_ctx
             ${NGHTTP3_LIBRARIES}
         )
-        target_compile_options(test_io_http3 PRIVATE
+        target_compile_options(test_ioh_http3 PRIVATE
             -Wno-missing-prototypes -Wno-missing-declarations
         )
-        add_test(NAME test_io_http3 COMMAND test_io_http3)
+        add_test(NAME test_ioh_http3 COMMAND test_ioh_http3)
     endif()
 else()
-    message(STATUS "HTTP/3 disabled (nghttp3 or io_quic not available)")
+    message(STATUS "HTTP/3 disabled (nghttp3 or ioh_quic not available)")
 endif()
 
 # ============================================================================
 # Sprint 10: Alt-Svc header (HTTP/3 discovery)
 # ============================================================================
 
-add_library(io_alt_svc STATIC src/http/io_alt_svc.c)
-target_include_directories(io_alt_svc PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_alt_svc PUBLIC io_response)
+add_library(ioh_alt_svc STATIC src/http/ioh_alt_svc.c)
+target_include_directories(ioh_alt_svc PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_alt_svc PUBLIC ioh_response)
 
-io_add_test(test_io_alt_svc tests/unit/test_io_alt_svc.c io_alt_svc io_response)
+ioh_add_test(test_ioh_alt_svc tests/unit/test_ioh_alt_svc.c ioh_alt_svc ioh_response)
 
 # ============================================================================
 # Sprint 10: HTTP/3 integration tests
 # ============================================================================
 
-if(BUILD_TESTING AND TARGET unity AND TARGET io_http3 AND TARGET io_quic)
+if(BUILD_TESTING AND TARGET unity AND TARGET ioh_http3 AND TARGET ioh_quic)
     add_executable(test_http3_server tests/integration/test_http3_server.c)
     target_include_directories(test_http3_server PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_include_directories(test_http3_server PRIVATE
@@ -809,7 +809,7 @@ if(BUILD_TESTING AND TARGET unity AND TARGET io_http3 AND TARGET io_quic)
         ${NGTCP2_WOLFSSL_LIBRARY_DIRS} ${NGHTTP3_LIBRARY_DIRS}
     )
     target_link_libraries(test_http3_server PRIVATE
-        unity io_http3 io_quic io_alt_svc io_request io_response io_ctx
+        unity ioh_http3 ioh_quic ioh_alt_svc ioh_request ioh_response ioh_ctx
         ${WOLFSSL_LIBRARIES} ${NGTCP2_LIBRARIES}
         ${NGTCP2_WOLFSSL_LIBRARIES} ${NGHTTP3_LIBRARIES}
     )
@@ -830,10 +830,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_pipeline tests/integration/test_pipeline.c)
     target_include_directories(test_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_pipeline PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_pipeline PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -843,10 +843,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_middleware_pipeline tests/integration/test_middleware_pipeline.c)
     target_include_directories(test_middleware_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_middleware_pipeline PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_middleware_pipeline PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -856,10 +856,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_health_pipeline tests/integration/test_health_pipeline.c)
     target_include_directories(test_health_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_health_pipeline PRIVATE
-        unity io_health_test io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_health_test ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_health_pipeline PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -869,10 +869,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_keepalive tests/integration/test_keepalive.c)
     target_include_directories(test_keepalive PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_keepalive PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_keepalive PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -882,10 +882,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_timeout tests/integration/test_timeout.c)
     target_include_directories(test_timeout PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_timeout PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_timeout PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -895,10 +895,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_shutdown tests/integration/test_shutdown.c)
     target_include_directories(test_shutdown PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_shutdown PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_shutdown PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -908,10 +908,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_limits tests/integration/test_limits.c)
     target_include_directories(test_limits PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_limits PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
     )
     target_compile_options(test_limits PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -921,10 +921,10 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_signal tests/integration/test_signal.c)
     target_include_directories(test_signal PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_signal PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
         pthread
     )
     target_compile_options(test_signal PRIVATE
@@ -935,11 +935,11 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_request_id tests/integration/test_request_id.c)
     target_include_directories(test_request_id PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_request_id PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
-        io_log
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
+        ioh_log
     )
     target_compile_options(test_request_id PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -949,11 +949,11 @@ if(BUILD_TESTING AND TARGET unity)
     add_executable(test_proxy_pipeline tests/integration/test_proxy_pipeline.c)
     target_include_directories(test_proxy_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_proxy_pipeline PRIVATE
-        unity io_server io_loop io_conn io_ctx
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
-        io_proxy_proto io_log
+        unity ioh_server ioh_loop ioh_conn ioh_ctx
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
+        ioh_proxy_proto ioh_log
     )
     target_compile_options(test_proxy_pipeline PRIVATE
         -Wno-missing-prototypes -Wno-missing-declarations
@@ -966,10 +966,10 @@ if(BUILD_TESTING AND TARGET unity)
     target_link_directories(test_tls_pipeline PRIVATE
         ${WOLFSSL_LIBRARY_DIRS})
     target_link_libraries(test_tls_pipeline PRIVATE
-        unity io_server io_loop io_conn io_ctx io_tls
-        io_http1 io_request io_response
-        io_router io_radix io_middleware
-        io_route_group io_route_inspect io_route_meta
+        unity ioh_server ioh_loop ioh_conn ioh_ctx ioh_tls
+        ioh_http1 ioh_request ioh_response
+        ioh_router ioh_radix ioh_middleware
+        ioh_route_group ioh_route_inspect ioh_route_meta
         ${WOLFSSL_LIBRARIES}
     )
     target_compile_options(test_tls_pipeline PRIVATE

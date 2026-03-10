@@ -562,7 +562,7 @@ ENTRYPOINT ["/usr/local/bin/ringwall"]
 
 Современные YAML-формы (не markdown-шаблоны) дают структурированный ввод с dropdown, checkbox, textarea:
 
-**`.github/ISSUE_TEMPLATE/bug_report.yml`** — ключевые поля для C/io_uring проекта:
+**`.github/ISSUE_TEMPLATE/bug_report.yml`** — ключевые поля для C/ioh_uring проекта:
 
 ```yaml
 name: "🐛 Bug Report"

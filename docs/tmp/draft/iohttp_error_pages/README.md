@@ -33,7 +33,7 @@ Beautiful, responsive error pages for iohttp HTTP server.
 Configure iohttp to serve these files as static error pages:
 
 ```c
-io_server_config_t cfg = {
+ioh_server_config_t cfg = {
     .error_pages = {
         .path_400 = "/var/www/errors/400.html",
         .path_401 = "/var/www/errors/401.html",

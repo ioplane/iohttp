@@ -10,7 +10,7 @@
 | `constexpr` | Compile-time вычисления для конфигурации, zero runtime overhead |
 | `[[nodiscard]]` | Принудительная проверка return values (критично для alloc/error functions) |
 | Type-safe enums | Enum с underlying type, предотвращает неявные conversions |
-| `static_assert` | Compile-time проверки (sizeof(io_conn_t) <= 512) |
+| `static_assert` | Compile-time проверки (sizeof(ioh_conn_t) <= 512) |
 | `typeof` | Упрощает generic macros без __typeof__ extensions |
 | `auto` | Упрощает итераторы и сложные типы |
 
@@ -178,14 +178,14 @@ if (buffer_ring_utilization > 90%) {
 }
 
 // 2. Per-connection memory accounting
-struct io_conn {
+struct ioh_conn {
     size_t current_memory;
     size_t max_memory;
     // ...
 };
 
 // 3. Defensive checks
-static_assert(sizeof(io_conn_t) <= 512, "Connection struct too large for cache line");
+static_assert(sizeof(ioh_conn_t) <= 512, "Connection struct too large for cache line");
 ```
 
 ---
@@ -249,7 +249,7 @@ struct iohttp_config {
    struct iohttp_rate_limit {
        uint32_t requests_per_second;
        uint32_t burst_size;
-       void (*on_violation)(io_conn_t *conn);
+       void (*on_violation)(ioh_conn_t *conn);
    };
    ```
 

@@ -254,31 +254,31 @@ done
 #include <iohttp.h>
 #include <stdio.h>
 
-void plaintext_handler(io_request_t *req, io_response_t *resp) {
-    io_response_set_status(resp, 200);
-    io_response_set_header(resp, "Content-Type", "text/plain");
-    io_response_set_body(resp, "Hello, World!", 13);
+void plaintext_handler(ioh_request_t *req, ioh_response_t *resp) {
+    ioh_response_set_status(resp, 200);
+    ioh_response_set_header(resp, "Content-Type", "text/plain");
+    ioh_response_set_body(resp, "Hello, World!", 13);
 }
 
-void json_handler(io_request_t *req, io_response_t *resp) {
-    io_response_set_status(resp, 200);
-    io_response_set_header(resp, "Content-Type", "application/json");
-    io_response_set_body(resp, "{\"message\":\"Hello, World!\"}", 30);
+void json_handler(ioh_request_t *req, ioh_response_t *resp) {
+    ioh_response_set_status(resp, 200);
+    ioh_response_set_header(resp, "Content-Type", "application/json");
+    ioh_response_set_body(resp, "{\"message\":\"Hello, World!\"}", 30);
 }
 
 int main() {
-    io_server_t *server = io_server_create(&(io_server_config_t){
+    ioh_server_t *server = ioh_server_create(&(ioh_server_config_t){
         .listen_addr = "0.0.0.0",
         .listen_port = 8080,
         .max_connections = 10000,
         .queue_depth = 4096,
     });
     
-    io_route_get(server, "/plaintext", plaintext_handler);
-    io_route_get(server, "/json", json_handler);
+    ioh_route_get(server, "/plaintext", plaintext_handler);
+    ioh_route_get(server, "/json", json_handler);
     
     printf("iohttp server listening on :8080\n");
-    io_server_run(server);
+    ioh_server_run(server);
     
     return 0;
 }

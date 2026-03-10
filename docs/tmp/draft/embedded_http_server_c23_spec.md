@@ -113,7 +113,7 @@
 
 ### 3.2 io_uring (Linux 5.1+, опционально но рекомендуется)
 
-- **io_uring Documentation**: https://kernel.dk/io_uring.pdf (Jens Axboe)
+- **io_uring Documentation**: https://kernel.dk/ioh_uring.pdf (Jens Axboe)
 - **liburing**: https://github.com/axboe/liburing
 
 **Требования:**
@@ -394,7 +394,7 @@ int main() {
     http_server_init(&server, &(http_config_t){
         .bind_addr = "0.0.0.0",
         .port = 8080,
-        .io_backend = HTTP_BACKEND_IOURING,  // или HTTP_BACKEND_AUTO для автоопределения
+        .ioh_backend = HTTP_BACKEND_IOURING,  // или HTTP_BACKEND_AUTO для автоопределения
         .io_uring = &uring_cfg,
         .worker_threads = 0  // io_uring = single-threaded + async I/O
     });
@@ -494,7 +494,7 @@ static http_status_t sse_handler(http_request_t *req, http_response_t *resp) {
 - [wolfSSL Manual](https://www.wolfssl.com/documentation/manuals/wolfssl/index.html)
 - [WHATWG HTML Living Standard - Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
 - [WebAssembly MIME type](https://webassembly.github.io/spec/core/binary/conventions.html)
-- [io_uring whitepaper](https://kernel.dk/io_uring.pdf) - Jens Axboe (PDF)
+- [io_uring whitepaper](https://kernel.dk/ioh_uring.pdf) - Jens Axboe (PDF)
 - [liburing GitHub](https://github.com/axboe/liburing) - Official userspace library
 
 ### C23 Standard

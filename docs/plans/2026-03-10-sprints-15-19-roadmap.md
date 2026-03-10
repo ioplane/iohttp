@@ -47,26 +47,26 @@ Sprint 14 (Project Hardening)─┤
 **Rationale:** Production deployments need liveness/readiness probes for orchestrators (Kubernetes, systemd watchdog, HAProxy health checks). Three endpoints: `/health` (basic liveness), `/ready` (accepting connections), `/live` (deep — io_uring ring, TLS context, buffer pools).
 
 **Files:**
-- Create: `src/core/io_health.h`
-- Create: `src/core/io_health.c`
-- Create: `tests/unit/test_io_health.c`
-- Modify: `src/core/io_server.h` — add health config fields
-- Modify: `src/core/io_server.c` — register health routes
+- Create: `src/core/ioh_health.h`
+- Create: `src/core/ioh_health.c`
+- Create: `tests/unit/test_ioh_health.c`
+- Modify: `src/core/ioh_server.h` — add health config fields
+- Modify: `src/core/ioh_server.c` — register health routes
 - Modify: `CMakeLists.txt` — add source file
 
 **Step 1: Read existing files**
 
-Read `src/core/io_server.h`, `src/core/io_server.c`, `src/core/io_ctx.h`, `src/router/io_router.h` to understand server lifecycle and route registration.
+Read `src/core/ioh_server.h`, `src/core/ioh_server.c`, `src/core/ioh_ctx.h`, `src/router/ioh_router.h` to understand server lifecycle and route registration.
 
 **Step 2: Write tests**
 
 ```c
-/* tests/unit/test_io_health.c */
+/* tests/unit/test_ioh_health.c */
 
 void test_health_check_default_config(void)
 {
-    io_health_config_t cfg = {0};
-    io_health_config_init(&cfg);
+    ioh_health_config_t cfg = {0};
+    ioh_health_config_init(&cfg);
     TEST_ASSERT_EQUAL_STRING("/health", cfg.health_path);
     TEST_ASSERT_EQUAL_STRING("/ready", cfg.ready_path);
     TEST_ASSERT_EQUAL_STRING("/live", cfg.live_path);
@@ -111,88 +111,88 @@ void test_health_disabled(void)
 **Step 3: Run tests to verify they fail**
 
 ```bash
-cmake --build --preset clang-debug && ctest --preset clang-debug -R test_io_health
+cmake --build --preset clang-debug && ctest --preset clang-debug -R test_ioh_health
 ```
 Expected: FAIL (functions undefined)
 
-**Step 4: Implement io_health.h**
+**Step 4: Implement ioh_health.h**
 
 ```c
-/* src/core/io_health.h */
+/* src/core/ioh_health.h */
 #ifndef IOHTTP_CORE_HEALTH_H
 #define IOHTTP_CORE_HEALTH_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct io_ctx io_ctx_t;
-typedef struct io_router io_router_t;
-typedef struct io_server io_server_t;
+typedef struct ioh_ctx ioh_ctx_t;
+typedef struct ioh_router ioh_router_t;
+typedef struct ioh_server ioh_server_t;
 
 /* Health check callback — return 0 = healthy, negative errno = unhealthy */
-typedef int (*io_health_check_fn)(const char **message, void *user_data);
+typedef int (*ioh_health_check_fn)(const char **message, void *user_data);
 
-constexpr uint32_t IO_HEALTH_MAX_CHECKS = 8;
+constexpr uint32_t IOH_HEALTH_MAX_CHECKS = 8;
 
 typedef struct {
     const char *name;          /* e.g. "database", "cache" */
-    io_health_check_fn check;
+    ioh_health_check_fn check;
     void *user_data;
-} io_health_checker_t;
+} ioh_health_checker_t;
 
 typedef struct {
     bool enabled;              /* default true */
     const char *health_path;   /* default "/health" */
     const char *ready_path;    /* default "/ready" */
     const char *live_path;     /* default "/live" */
-    io_health_checker_t checkers[IO_HEALTH_MAX_CHECKS];
+    ioh_health_checker_t checkers[IOH_HEALTH_MAX_CHECKS];
     uint32_t checker_count;
-} io_health_config_t;
+} ioh_health_config_t;
 
-void io_health_config_init(io_health_config_t *cfg);
+void ioh_health_config_init(ioh_health_config_t *cfg);
 
 /* Register health endpoints on a router. Server ptr used for readiness state. */
-[[nodiscard]] int io_health_register(io_router_t *r, io_server_t *srv,
-                                     const io_health_config_t *cfg);
+[[nodiscard]] int ioh_health_register(ioh_router_t *r, ioh_server_t *srv,
+                                     const ioh_health_config_t *cfg);
 
 /* Add a custom deep-liveness checker */
-[[nodiscard]] int io_health_add_checker(io_health_config_t *cfg, const char *name,
-                                        io_health_check_fn check, void *user_data);
+[[nodiscard]] int ioh_health_add_checker(ioh_health_config_t *cfg, const char *name,
+                                        ioh_health_check_fn check, void *user_data);
 
 /* Built-in handlers (registered internally, but exposed for testing) */
-int io_health_handler(io_ctx_t *c);
-int io_ready_handler(io_ctx_t *c);
-int io_live_handler(io_ctx_t *c);
+int ioh_health_handler(ioh_ctx_t *c);
+int ioh_ready_handler(ioh_ctx_t *c);
+int ioh_live_handler(ioh_ctx_t *c);
 
 #endif
 ```
 
-**Step 5: Implement io_health.c**
+**Step 5: Implement ioh_health.c**
 
-- `io_health_handler`: return `{"status":"ok"}` with 200
-- `io_ready_handler`: check server drain state via `io_server_is_draining(srv)`, return 200 or 503
-- `io_live_handler`: run all registered checkers, aggregate results into JSON, return 200 or 503
-- `io_health_register`: call `io_router_get()` for each path; store server ptr via `io_route_opts_t`
+- `ioh_health_handler`: return `{"status":"ok"}` with 200
+- `ioh_ready_handler`: check server drain state via `ioh_server_is_draining(srv)`, return 200 or 503
+- `ioh_live_handler`: run all registered checkers, aggregate results into JSON, return 200 or 503
+- `ioh_health_register`: call `ioh_router_get()` for each path; store server ptr via `ioh_route_opts_t`
 
-**Step 6: Add io_server_is_draining() accessor**
+**Step 6: Add ioh_server_is_draining() accessor**
 
 ```c
-/* In io_server.h: */
-bool io_server_is_draining(const io_server_t *srv);
+/* In ioh_server.h: */
+bool ioh_server_is_draining(const ioh_server_t *srv);
 ```
 
 **Step 7: Run tests**
 
 ```bash
-cmake --build --preset clang-debug && ctest --preset clang-debug -R test_io_health
+cmake --build --preset clang-debug && ctest --preset clang-debug -R test_ioh_health
 ```
 Expected: PASS
 
 **Step 8: Commit**
 
 ```bash
-git add src/core/io_health.h src/core/io_health.c src/core/io_server.h src/core/io_server.c \
-        tests/unit/test_io_health.c CMakeLists.txt
+git add src/core/ioh_health.h src/core/ioh_health.c src/core/ioh_server.h src/core/ioh_server.c \
+        tests/unit/test_ioh_health.c CMakeLists.txt
 git commit -m "feat(core): add health check endpoint framework (/health, /ready, /live)
 
 Three built-in endpoints: liveness (200 OK), readiness (503 during drain),
@@ -207,14 +207,14 @@ Configurable paths, optional disable, custom checker registration."
 **Rationale:** API routes handling file uploads need longer body timeouts (300s) while simple GET routes should keep the default (60s). Currently all routes share server-level timeouts.
 
 **Files:**
-- Modify: `src/router/io_router.h` — add timeout fields to `io_route_opts_t`
-- Modify: `src/core/io_conn.h` — add per-request timeout override fields to `io_conn_t`
-- Modify: `src/core/io_conn.c` — use per-route timeouts when set
-- Create: `tests/unit/test_io_route_timeout.c`
+- Modify: `src/router/ioh_router.h` — add timeout fields to `ioh_route_opts_t`
+- Modify: `src/core/ioh_conn.h` — add per-request timeout override fields to `ioh_conn_t`
+- Modify: `src/core/ioh_conn.c` — use per-route timeouts when set
+- Create: `tests/unit/test_ioh_route_timeout.c`
 
 **Step 1: Read existing timeout flow**
 
-Read `src/core/io_conn.h` (timeout_phase enum), `src/core/io_conn.c` (how arm_recv/arm_send use timeouts), `src/core/io_loop.c` (LINK_TIMEOUT SQE submission).
+Read `src/core/ioh_conn.h` (timeout_phase enum), `src/core/ioh_conn.c` (how arm_recv/arm_send use timeouts), `src/core/ioh_loop.c` (LINK_TIMEOUT SQE submission).
 
 **Step 2: Write tests**
 
@@ -239,19 +239,19 @@ void test_route_timeout_zero_means_no_override(void)
 }
 ```
 
-**Step 3: Add timeout fields to io_route_opts_t**
+**Step 3: Add timeout fields to ioh_route_opts_t**
 
 ```c
-/* In io_router.h, add to io_route_opts_t: */
+/* In ioh_router.h, add to ioh_route_opts_t: */
 typedef struct {
-    const io_route_meta_t *meta;
+    const ioh_route_meta_t *meta;
     void *oas_operation;
     uint32_t permissions;
     bool auth_required;
     uint32_t header_timeout_ms;  /* 0 = use server default */
     uint32_t body_timeout_ms;    /* 0 = use server default */
     uint32_t keepalive_timeout_ms; /* 0 = use server default */
-} io_route_opts_t;
+} ioh_route_opts_t;
 ```
 
 **Step 4: Apply per-route timeout after dispatch**
@@ -268,12 +268,12 @@ Expected: All PASS including new timeout tests
 **Step 6: Commit**
 
 ```bash
-git add src/router/io_router.h src/core/io_conn.h src/core/io_conn.c \
-        tests/unit/test_io_route_timeout.c CMakeLists.txt
+git add src/router/ioh_router.h src/core/ioh_conn.h src/core/ioh_conn.c \
+        tests/unit/test_ioh_route_timeout.c CMakeLists.txt
 git commit -m "feat(router): add per-route timeout configuration
 
 Routes can override header_timeout_ms, body_timeout_ms, keepalive_timeout_ms
-via io_route_opts_t. Zero means use server default. Enables longer timeouts
+via ioh_route_opts_t. Zero means use server default. Enables longer timeouts
 for file upload routes while keeping tight defaults elsewhere."
 ```
 
@@ -297,50 +297,50 @@ Expected: All tests PASS, quality pipeline green.
 
 ### Task 16.1: Set-Cookie Response Builder (RFC 6265bis)
 
-**Rationale:** `io_request_cookie()` exists for parsing, but there's no way to SET cookies in responses. Need `Set-Cookie` header builder with SameSite, Secure, HttpOnly, Domain, Path, Max-Age.
+**Rationale:** `ioh_request_cookie()` exists for parsing, but there's no way to SET cookies in responses. Need `Set-Cookie` header builder with SameSite, Secure, HttpOnly, Domain, Path, Max-Age.
 
 **Files:**
-- Create: `src/http/io_cookie.h`
-- Create: `src/http/io_cookie.c`
-- Create: `tests/unit/test_io_cookie.c`
-- Modify: `src/core/io_ctx.h` — add `io_ctx_set_cookie()` convenience
+- Create: `src/http/ioh_cookie.h`
+- Create: `src/http/ioh_cookie.c`
+- Create: `tests/unit/test_ioh_cookie.c`
+- Modify: `src/core/ioh_ctx.h` — add `ioh_ctx_set_cookie()` convenience
 
 **Step 1: Read existing cookie code**
 
-Read `src/http/io_request.c` (io_request_cookie function), `src/http/io_response.h`.
+Read `src/http/ioh_request.c` (ioh_request_cookie function), `src/http/ioh_response.h`.
 
 **Step 2: Write tests**
 
 ```c
 void test_cookie_simple(void)
 {
-    /* io_cookie_t c = { .name = "sid", .value = "abc123" } */
-    /* io_cookie_serialize(&c, buf, sizeof(buf)) */
+    /* ioh_cookie_t c = { .name = "sid", .value = "abc123" } */
+    /* ioh_cookie_serialize(&c, buf, sizeof(buf)) */
     /* Assert: "sid=abc123" */
 }
 
 void test_cookie_full_attributes(void)
 {
     /* .name="sid", .value="abc", .domain="example.com", .path="/",
-       .max_age=3600, .secure=true, .http_only=true, .same_site=IO_SAME_SITE_LAX */
+       .max_age=3600, .secure=true, .http_only=true, .same_site=IOH_SAME_SITE_LAX */
     /* Assert: "sid=abc; Domain=example.com; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax" */
 }
 
 void test_cookie_same_site_strict(void) { /* Assert: "SameSite=Strict" */ }
 void test_cookie_same_site_none_requires_secure(void) { /* Assert: SameSite=None forces Secure */ }
 void test_cookie_name_validation(void) { /* Reject names with = ; \n */ }
-void test_ctx_set_cookie(void) { /* io_ctx_set_cookie() adds Set-Cookie header */ }
+void test_ctx_set_cookie(void) { /* ioh_ctx_set_cookie() adds Set-Cookie header */ }
 ```
 
-**Step 3: Implement io_cookie.h**
+**Step 3: Implement ioh_cookie.h**
 
 ```c
 typedef enum : uint8_t {
-    IO_SAME_SITE_DEFAULT, /* browser default */
-    IO_SAME_SITE_LAX,
-    IO_SAME_SITE_STRICT,
-    IO_SAME_SITE_NONE,    /* requires Secure */
-} io_same_site_t;
+    IOH_SAME_SITE_DEFAULT, /* browser default */
+    IOH_SAME_SITE_LAX,
+    IOH_SAME_SITE_STRICT,
+    IOH_SAME_SITE_NONE,    /* requires Secure */
+} ioh_same_site_t;
 
 typedef struct {
     const char *name;
@@ -348,26 +348,26 @@ typedef struct {
     const char *domain;    /* nullable */
     const char *path;      /* nullable */
     int64_t max_age;       /* seconds, -1 = session, 0 = delete */
-    io_same_site_t same_site;
+    ioh_same_site_t same_site;
     bool secure;
     bool http_only;
-} io_cookie_t;
+} ioh_cookie_t;
 
 /* Serialize cookie into Set-Cookie header value. Returns bytes written or -ENOSPC. */
-[[nodiscard]] int io_cookie_serialize(const io_cookie_t *cookie, char *buf, size_t buf_size);
+[[nodiscard]] int ioh_cookie_serialize(const ioh_cookie_t *cookie, char *buf, size_t buf_size);
 
 /* Validate cookie name per RFC 6265bis */
-[[nodiscard]] int io_cookie_validate_name(const char *name);
+[[nodiscard]] int ioh_cookie_validate_name(const char *name);
 ```
 
-**Step 4: Add io_ctx_set_cookie()**
+**Step 4: Add ioh_ctx_set_cookie()**
 
 ```c
-/* In io_ctx.h: */
-[[nodiscard]] int io_ctx_set_cookie(io_ctx_t *c, const io_cookie_t *cookie);
+/* In ioh_ctx.h: */
+[[nodiscard]] int ioh_ctx_set_cookie(ioh_ctx_t *c, const ioh_cookie_t *cookie);
 ```
 
-Implementation: serialize cookie → `io_ctx_set_header(c, "Set-Cookie", serialized)`.
+Implementation: serialize cookie → `ioh_ctx_set_header(c, "Set-Cookie", serialized)`.
 
 **Step 5: Run tests, commit**
 
@@ -375,12 +375,12 @@ Implementation: serialize cookie → `io_ctx_set_header(c, "Set-Cookie", seriali
 
 ### Task 16.2: Vary Header in Content Negotiation
 
-**Rationale:** `io_request_accepts()` and `io_compress_negotiate()` already select content variants but don't emit `Vary` header. Caches will serve wrong content without it.
+**Rationale:** `ioh_request_accepts()` and `ioh_compress_negotiate()` already select content variants but don't emit `Vary` header. Caches will serve wrong content without it.
 
 **Files:**
-- Modify: `src/static/io_static.c` — add `Vary: Accept-Encoding` when serving compressed
-- Modify: `src/core/io_ctx.c` — add `Vary: Accept` when `io_ctx_json/text/html` uses negotiation
-- Create: `tests/unit/test_io_vary.c`
+- Modify: `src/static/ioh_static.c` — add `Vary: Accept-Encoding` when serving compressed
+- Modify: `src/core/ioh_ctx.c` — add `Vary: Accept` when `ioh_ctx_json/text/html` uses negotiation
+- Create: `tests/unit/test_ioh_vary.c`
 
 **Step 1: Write tests**
 
@@ -400,7 +400,7 @@ void test_vary_multiple_headers(void)
 
 **Step 2: Implement**
 
-Add `io_response_add_vary()` helper that appends to existing Vary header (comma-separated). Call it from compression and content negotiation paths.
+Add `ioh_response_add_vary()` helper that appends to existing Vary header (comma-separated). Call it from compression and content negotiation paths.
 
 **Step 3: Run tests, commit**
 
@@ -411,28 +411,28 @@ Add `io_response_add_vary()` helper that appends to existing Vary header (comma-
 **Rationale:** Virtual hosting — same server, different domains, different route trees. Required for multi-tenant deployments.
 
 **Files:**
-- Create: `src/router/io_vhost.h`
-- Create: `src/router/io_vhost.c`
-- Create: `tests/unit/test_io_vhost.c`
-- Modify: `src/core/io_server.h` — add vhost support
+- Create: `src/router/ioh_vhost.h`
+- Create: `src/router/ioh_vhost.c`
+- Create: `tests/unit/test_ioh_vhost.c`
+- Modify: `src/core/ioh_server.h` — add vhost support
 
 **Step 1: Design**
 
 ```c
-typedef struct io_vhost io_vhost_t;
+typedef struct ioh_vhost ioh_vhost_t;
 
 /* Create a virtual host router (dispatches to sub-routers by Host header) */
-[[nodiscard]] io_vhost_t *io_vhost_create(void);
-void io_vhost_destroy(io_vhost_t *vhost);
+[[nodiscard]] ioh_vhost_t *ioh_vhost_create(void);
+void ioh_vhost_destroy(ioh_vhost_t *vhost);
 
 /* Add a host->router mapping. Wildcard: "*.example.com" */
-[[nodiscard]] int io_vhost_add(io_vhost_t *v, const char *host, io_router_t *router);
+[[nodiscard]] int ioh_vhost_add(ioh_vhost_t *v, const char *host, ioh_router_t *router);
 
 /* Set default router for unmatched hosts */
-void io_vhost_set_default(io_vhost_t *v, io_router_t *router);
+void ioh_vhost_set_default(ioh_vhost_t *v, ioh_router_t *router);
 
 /* Dispatch: extract Host header, find router, delegate */
-[[nodiscard]] io_route_match_t io_vhost_dispatch(const io_vhost_t *v, const io_request_t *req);
+[[nodiscard]] ioh_route_match_t ioh_vhost_dispatch(const ioh_vhost_t *v, const ioh_request_t *req);
 ```
 
 **Step 2: Write tests**
@@ -465,41 +465,41 @@ cmake --preset clang-asan && cmake --build --preset clang-asan && ctest --preset
 
 ### Task 17.1: Streaming Request Body (Chunked Input)
 
-**Rationale:** Current API buffers entire request body before calling handler. Large file uploads or streaming inputs need incremental processing. This adds a pull-based body reader to `io_ctx_t`.
+**Rationale:** Current API buffers entire request body before calling handler. Large file uploads or streaming inputs need incremental processing. This adds a pull-based body reader to `ioh_ctx_t`.
 
 **Files:**
-- Create: `src/http/io_body_reader.h`
-- Create: `src/http/io_body_reader.c`
-- Create: `tests/unit/test_io_body_reader.c`
-- Modify: `src/core/io_ctx.h` — add body reader accessor
-- Modify: `src/http/io_http1.c` — support streaming body delivery
+- Create: `src/http/ioh_body_reader.h`
+- Create: `src/http/ioh_body_reader.c`
+- Create: `tests/unit/test_ioh_body_reader.c`
+- Modify: `src/core/ioh_ctx.h` — add body reader accessor
+- Modify: `src/http/ioh_http1.c` — support streaming body delivery
 
 **Step 1: Design pull-based reader**
 
 ```c
-typedef struct io_body_reader io_body_reader_t;
+typedef struct ioh_body_reader ioh_body_reader_t;
 
 typedef enum : uint8_t {
-    IO_BODY_CHUNK,     /* data available in buf/len */
-    IO_BODY_EOF,       /* no more data */
-    IO_BODY_NEED_DATA, /* caller should re-arm recv and retry */
-    IO_BODY_ERROR,     /* parsing error */
-} io_body_status_t;
+    IOH_BODY_CHUNK,     /* data available in buf/len */
+    IOH_BODY_EOF,       /* no more data */
+    IOH_BODY_NEED_DATA, /* caller should re-arm recv and retry */
+    IOH_BODY_ERROR,     /* parsing error */
+} ioh_body_status_t;
 
 typedef struct {
-    io_body_status_t status;
+    ioh_body_status_t status;
     const uint8_t *data;
     size_t len;
-} io_body_chunk_t;
+} ioh_body_chunk_t;
 
 /* Read next chunk from body stream. Non-blocking. */
-[[nodiscard]] io_body_chunk_t io_body_reader_read(io_body_reader_t *r);
+[[nodiscard]] ioh_body_chunk_t ioh_body_reader_read(ioh_body_reader_t *r);
 
 /* Convenience: is body fully buffered? (small bodies skip streaming) */
-bool io_body_reader_is_buffered(const io_body_reader_t *r);
+bool ioh_body_reader_is_buffered(const ioh_body_reader_t *r);
 
-/* In io_ctx.h: */
-io_body_reader_t *io_ctx_body_reader(io_ctx_t *c);
+/* In ioh_ctx.h: */
+ioh_body_reader_t *ioh_ctx_body_reader(ioh_ctx_t *c);
 ```
 
 **Step 2: Write tests**
@@ -522,7 +522,7 @@ void test_body_reader_content_length(void)
 
 void test_body_reader_exceeds_limit(void)
 {
-    /* Body > max_body_size → IO_BODY_ERROR with 413 */
+    /* Body > max_body_size → IOH_BODY_ERROR with 413 */
 }
 ```
 
@@ -535,40 +535,40 @@ void test_body_reader_exceeds_limit(void)
 **Rationale:** When a backend (database, upstream service) is failing, keep hammering it wastes resources and delays recovery. Circuit breaker stops sending requests after threshold failures, returning 503 immediately, and periodically probes to check recovery.
 
 **Files:**
-- Create: `src/middleware/io_circuit.h`
-- Create: `src/middleware/io_circuit.c`
-- Create: `tests/unit/test_io_circuit.c`
+- Create: `src/middleware/ioh_circuit.h`
+- Create: `src/middleware/ioh_circuit.c`
+- Create: `tests/unit/test_ioh_circuit.c`
 
 **Step 1: Design**
 
 ```c
 typedef enum : uint8_t {
-    IO_CIRCUIT_CLOSED,    /* normal operation, requests pass through */
-    IO_CIRCUIT_OPEN,      /* failures exceeded threshold, requests rejected */
-    IO_CIRCUIT_HALF_OPEN, /* probe one request to test recovery */
-} io_circuit_state_t;
+    IOH_CIRCUIT_CLOSED,    /* normal operation, requests pass through */
+    IOH_CIRCUIT_OPEN,      /* failures exceeded threshold, requests rejected */
+    IOH_CIRCUIT_HALF_OPEN, /* probe one request to test recovery */
+} ioh_circuit_state_t;
 
 typedef struct {
     uint32_t failure_threshold;   /* failures to trip open (default 5) */
     uint32_t success_threshold;   /* successes in half-open to close (default 2) */
     uint32_t timeout_ms;          /* open → half-open transition (default 30000) */
     uint16_t open_status;         /* HTTP status when open (default 503) */
-} io_circuit_config_t;
+} ioh_circuit_config_t;
 
-typedef struct io_circuit_breaker io_circuit_breaker_t;
+typedef struct ioh_circuit_breaker ioh_circuit_breaker_t;
 
-[[nodiscard]] io_circuit_breaker_t *io_circuit_create(const io_circuit_config_t *cfg);
-void io_circuit_destroy(io_circuit_breaker_t *cb);
+[[nodiscard]] ioh_circuit_breaker_t *ioh_circuit_create(const ioh_circuit_config_t *cfg);
+void ioh_circuit_destroy(ioh_circuit_breaker_t *cb);
 
 /* Use as middleware: wraps handler, tracks success/failure */
-io_middleware_fn io_circuit_middleware(io_circuit_breaker_t *cb);
+ioh_middleware_fn ioh_circuit_middleware(ioh_circuit_breaker_t *cb);
 
 /* Manual state inspection */
-io_circuit_state_t io_circuit_state(const io_circuit_breaker_t *cb);
+ioh_circuit_state_t ioh_circuit_state(const ioh_circuit_breaker_t *cb);
 
 /* Record result manually (for non-middleware usage) */
-void io_circuit_record_success(io_circuit_breaker_t *cb);
-void io_circuit_record_failure(io_circuit_breaker_t *cb);
+void ioh_circuit_record_success(ioh_circuit_breaker_t *cb);
+void ioh_circuit_record_failure(ioh_circuit_breaker_t *cb);
 ```
 
 **Step 2: Write tests**
@@ -627,9 +627,9 @@ cmake --preset clang-asan && cmake --build --preset clang-asan && ctest --preset
 **Rationale:** The adapter is the bridge between iohttp's route metadata and liboas's OpenAPI model. It walks the router, feeds metadata to liboas, and mounts validation + documentation endpoints. Follows the bunrouter+huma pattern.
 
 **Files:**
-- Create: `src/middleware/io_liboas.h`
-- Create: `src/middleware/io_liboas.c`
-- Create: `tests/unit/test_io_liboas.c`
+- Create: `src/middleware/ioh_liboas.h`
+- Create: `src/middleware/ioh_liboas.c`
+- Create: `tests/unit/test_ioh_liboas.c`
 - Modify: `CMakeLists.txt` — add optional liboas dependency
 
 **Step 1: Read liboas public API**
@@ -638,16 +638,16 @@ Read `/opt/projects/repositories/liboas/include/liboas/oas_adapter.h`, `oas_type
 
 **Step 2: Read iohttp introspection API**
 
-Read `src/router/io_route_inspect.h` (`io_router_walk`, `io_route_info_t`), `src/router/io_route_meta.h` (`io_route_meta_t`, `io_param_meta_t`).
+Read `src/router/ioh_route_inspect.h` (`ioh_router_walk`, `ioh_route_info_t`), `src/router/ioh_route_meta.h` (`ioh_route_meta_t`, `ioh_param_meta_t`).
 
 **Step 3: Design adapter**
 
 ```c
-/* src/middleware/io_liboas.h */
+/* src/middleware/ioh_liboas.h */
 #ifndef IOHTTP_MIDDLEWARE_LIBOAS_H
 #define IOHTTP_MIDDLEWARE_LIBOAS_H
 
-#include "router/io_router.h"
+#include "router/ioh_router.h"
 
 /* Forward declare liboas types (no #include of liboas headers in public API) */
 typedef struct oas_adapter oas_adapter_t;
@@ -660,25 +660,25 @@ typedef struct {
     const char *docs_path;          /* default "/docs" (Scalar UI) */
     bool validate_requests;         /* default false */
     bool validate_responses;        /* default false (debug only) */
-} io_liboas_config_t;
+} ioh_liboas_config_t;
 
-typedef struct io_liboas io_liboas_t;
+typedef struct ioh_liboas ioh_liboas_t;
 
-void io_liboas_config_init(io_liboas_config_t *cfg);
+void ioh_liboas_config_init(ioh_liboas_config_t *cfg);
 
 /* Create adapter: walks router, builds OpenAPI spec via liboas */
-[[nodiscard]] io_liboas_t *io_liboas_create(io_router_t *router,
-                                            const io_liboas_config_t *cfg);
-void io_liboas_destroy(io_liboas_t *adapter);
+[[nodiscard]] ioh_liboas_t *ioh_liboas_create(ioh_router_t *router,
+                                            const ioh_liboas_config_t *cfg);
+void ioh_liboas_destroy(ioh_liboas_t *adapter);
 
 /* Mount spec + docs endpoints onto router */
-[[nodiscard]] int io_liboas_mount(io_liboas_t *adapter, io_router_t *router);
+[[nodiscard]] int ioh_liboas_mount(ioh_liboas_t *adapter, ioh_router_t *router);
 
-/* Request validation middleware (use with io_router_use) */
-io_middleware_fn io_liboas_validate_middleware(io_liboas_t *adapter);
+/* Request validation middleware (use with ioh_router_use) */
+ioh_middleware_fn ioh_liboas_validate_middleware(ioh_liboas_t *adapter);
 
 /* Get generated spec JSON (for testing or embedding) */
-const char *io_liboas_spec_json(const io_liboas_t *adapter, size_t *len);
+const char *ioh_liboas_spec_json(const ioh_liboas_t *adapter, size_t *len);
 
 #endif
 ```
@@ -727,9 +727,9 @@ void test_liboas_validate_request_invalid(void)
 
 **Step 5: Implement adapter**
 
-Key logic in `io_liboas_create()`:
-1. Call `io_router_walk()` to enumerate all routes
-2. For each `io_route_info_t`, map to liboas OpenAPI path item:
+Key logic in `ioh_liboas_create()`:
+1. Call `ioh_router_walk()` to enumerate all routes
+2. For each `ioh_route_info_t`, map to liboas OpenAPI path item:
    - `info->pattern` → OpenAPI path (convert `:id` to `{id}`)
    - `info->method` → OpenAPI method
    - `info->meta->summary` → operation summary
@@ -747,7 +747,7 @@ option(IOHTTP_ENABLE_LIBOAS "Enable liboas OpenAPI integration" OFF)
 if(IOHTTP_ENABLE_LIBOAS)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LIBOAS REQUIRED IMPORTED_TARGET liboas)
-    target_sources(iohttp PRIVATE src/middleware/io_liboas.c)
+    target_sources(iohttp PRIVATE src/middleware/ioh_liboas.c)
     target_link_libraries(iohttp PRIVATE PkgConfig::LIBOAS)
     target_compile_definitions(iohttp PRIVATE IOHTTP_HAS_LIBOAS=1)
 endif()
@@ -756,8 +756,8 @@ endif()
 **Step 7: Run tests, commit**
 
 ```bash
-git add src/middleware/io_liboas.h src/middleware/io_liboas.c \
-        tests/unit/test_io_liboas.c CMakeLists.txt
+git add src/middleware/ioh_liboas.h src/middleware/ioh_liboas.c \
+        tests/unit/test_ioh_liboas.c CMakeLists.txt
 git commit -m "feat(middleware): add liboas adapter for OpenAPI spec generation and validation
 
 Walks route introspection API, maps iohttp metadata to OpenAPI 3.x via liboas.
@@ -780,42 +780,42 @@ validation middleware. Enabled via -DIOHTTP_ENABLE_LIBOAS=ON."
 void test_full_rest_api_with_liboas(void)
 {
     /* 1. Create router */
-    io_router_t *r = io_router_create();
+    ioh_router_t *r = ioh_router_create();
 
     /* 2. Register routes with metadata */
     static const char *user_tags[] = {"users", nullptr};
-    static const io_param_meta_t user_params[] = {
-        {.name = "id", .in = IO_PARAM_PATH, .required = true, .description = "User ID"},
+    static const ioh_param_meta_t user_params[] = {
+        {.name = "id", .in = IOH_PARAM_PATH, .required = true, .description = "User ID"},
     };
-    static const io_route_meta_t get_user_meta = {
+    static const ioh_route_meta_t get_user_meta = {
         .summary = "Get user by ID",
         .tags = user_tags,
         .params = user_params,
         .param_count = 1,
     };
-    io_router_get_with(r, "/api/users/:id", get_user_handler,
-                       &(io_route_opts_t){.meta = &get_user_meta});
+    ioh_router_get_with(r, "/api/users/:id", get_user_handler,
+                       &(ioh_route_opts_t){.meta = &get_user_meta});
 
     /* 3. Create liboas adapter */
-    io_liboas_config_t cfg;
-    io_liboas_config_init(&cfg);
+    ioh_liboas_config_t cfg;
+    ioh_liboas_config_init(&cfg);
     cfg.title = "Test API";
     cfg.version = "1.0.0";
     cfg.validate_requests = true;
 
-    io_liboas_t *oas = io_liboas_create(r, &cfg);
+    ioh_liboas_t *oas = ioh_liboas_create(r, &cfg);
     TEST_ASSERT_NOT_NULL(oas);
 
     /* 4. Verify spec JSON */
     size_t spec_len = 0;
-    const char *spec = io_liboas_spec_json(oas, &spec_len);
+    const char *spec = ioh_liboas_spec_json(oas, &spec_len);
     TEST_ASSERT_NOT_NULL(spec);
     TEST_ASSERT_TRUE(spec_len > 0);
     /* Assert spec contains "/api/users/{id}" path */
 
     /* 5. Cleanup */
-    io_liboas_destroy(oas);
-    io_router_destroy(r);
+    ioh_liboas_destroy(oas);
+    ioh_router_destroy(r);
 }
 ```
 
@@ -844,10 +844,10 @@ ctest --preset clang-asan
 **Rationale:** Distributed tracing requires propagating `traceparent`/`tracestate` headers (W3C Trace Context). iohttp doesn't need a full OpenTelemetry SDK — just parse/generate trace headers and expose hooks for external collectors.
 
 **Files:**
-- Create: `src/core/io_trace.h`
-- Create: `src/core/io_trace.c`
-- Create: `tests/unit/test_io_trace.c`
-- Modify: `src/core/io_ctx.h` — add trace context accessor
+- Create: `src/core/ioh_trace.h`
+- Create: `src/core/ioh_trace.c`
+- Create: `tests/unit/test_ioh_trace.c`
+- Modify: `src/core/ioh_ctx.h` — add trace context accessor
 
 **Step 1: Design**
 
@@ -858,27 +858,27 @@ typedef struct {
     uint8_t parent_id[8];   /* 64-bit span ID */
     uint8_t trace_flags;    /* 01 = sampled */
     bool valid;
-} io_trace_ctx_t;
+} ioh_trace_ctx_t;
 
 /* Trace event hook — called on request start/end */
-typedef void (*io_trace_hook_fn)(const io_trace_ctx_t *trace, const io_request_t *req,
+typedef void (*ioh_trace_hook_fn)(const ioh_trace_ctx_t *trace, const ioh_request_t *req,
                                  uint16_t status, uint64_t duration_us, void *user_data);
 
 /* Parse traceparent header */
-[[nodiscard]] int io_trace_parse(const char *traceparent, io_trace_ctx_t *out);
+[[nodiscard]] int ioh_trace_parse(const char *traceparent, ioh_trace_ctx_t *out);
 
 /* Generate new traceparent string (for outgoing requests) */
-[[nodiscard]] int io_trace_format(const io_trace_ctx_t *trace, char *buf, size_t buf_size);
+[[nodiscard]] int ioh_trace_format(const ioh_trace_ctx_t *trace, char *buf, size_t buf_size);
 
 /* Generate new trace context (root span) */
-void io_trace_generate(io_trace_ctx_t *out);
+void ioh_trace_generate(ioh_trace_ctx_t *out);
 
 /* Register a trace hook on the server (called per-request) */
-[[nodiscard]] int io_server_set_trace_hook(io_server_t *srv, io_trace_hook_fn hook,
+[[nodiscard]] int ioh_server_set_trace_hook(ioh_server_t *srv, ioh_trace_hook_fn hook,
                                            void *user_data);
 
-/* In io_ctx.h: */
-const io_trace_ctx_t *io_ctx_trace(const io_ctx_t *c);
+/* In ioh_ctx.h: */
+const ioh_trace_ctx_t *ioh_ctx_trace(const ioh_ctx_t *c);
 ```
 
 **Step 2: Write tests**
@@ -904,7 +904,7 @@ void test_trace_generate_unique(void)
 
 void test_trace_propagation_in_ctx(void)
 {
-    /* Request with traceparent → io_ctx_trace() returns parsed context */
+    /* Request with traceparent → ioh_ctx_trace() returns parsed context */
 }
 
 void test_trace_hook_called(void)
@@ -922,22 +922,22 @@ void test_trace_hook_called(void)
 **Rationale:** Long-running servers need to update TLS certificates, rate limits, and route configuration without restarting. SIGHUP is the Unix convention for config reload.
 
 **Files:**
-- Create: `src/core/io_reload.h`
-- Create: `src/core/io_reload.c`
-- Create: `tests/unit/test_io_reload.c`
-- Modify: `src/core/io_server.c` — add SIGHUP to signalfd mask
+- Create: `src/core/ioh_reload.h`
+- Create: `src/core/ioh_reload.c`
+- Create: `tests/unit/test_ioh_reload.c`
+- Modify: `src/core/ioh_server.c` — add SIGHUP to signalfd mask
 
 **Step 1: Design**
 
 ```c
 /* Reload callback — called on SIGHUP. Return 0 to acknowledge, negative to reject. */
-typedef int (*io_reload_fn)(io_server_t *srv, void *user_data);
+typedef int (*ioh_reload_fn)(ioh_server_t *srv, void *user_data);
 
 /* Register a reload callback */
-[[nodiscard]] int io_server_on_reload(io_server_t *srv, io_reload_fn fn, void *user_data);
+[[nodiscard]] int ioh_server_on_reload(ioh_server_t *srv, ioh_reload_fn fn, void *user_data);
 
 /* Trigger reload programmatically (for testing without signals) */
-[[nodiscard]] int io_server_reload(io_server_t *srv);
+[[nodiscard]] int ioh_server_reload(ioh_server_t *srv);
 ```
 
 **Step 2: Write tests**
@@ -963,7 +963,7 @@ void test_reload_callback_failure(void)
 
 Add SIGHUP to the signalfd mask (alongside SIGTERM/SIGQUIT). When SIGHUP CQE is received, call registered reload callbacks. No atomics needed — reload runs in the event loop thread.
 
-TLS reload pattern: create new `io_tls_ctx_t`, swap pointer with `io_server_set_tls()`, destroy old context after all active connections using it have drained.
+TLS reload pattern: create new `ioh_tls_ctx_t`, swap pointer with `ioh_server_set_tls()`, destroy old context after all active connections using it have drained.
 
 **Step 4: Run tests, commit**
 

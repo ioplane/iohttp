@@ -26,23 +26,23 @@ ctest --preset clang-debug
 ### Task 1.1: io_uring Ring Management
 
 **Files:**
-- Create: `src/core/io_loop.h`
-- Create: `src/core/io_loop.c`
-- Create: `tests/unit/test_io_loop.c`
+- Create: `src/core/ioh_loop.h`
+- Create: `src/core/ioh_loop.c`
+- Create: `tests/unit/test_ioh_loop.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
-`io_loop_t` wraps `struct io_uring` with:
-- `io_loop_create(io_loop_config_t *cfg)` — ring setup with queue_depth, flags
-- `io_loop_destroy(io_loop_t *loop)` — cleanup
-- `io_loop_run(io_loop_t *loop)` — main event loop (blocks)
-- `io_loop_stop(io_loop_t *loop)` — signal stop via eventfd
-- `io_loop_add_timer(loop, ms, callback, data)` — timer via `IORING_OP_TIMEOUT`
-- `io_loop_add_linked_timeout(loop, sqe, ms)` — linked timeout via `IORING_OP_LINK_TIMEOUT`
-- `io_loop_cancel_timer(loop, timer_id)` — cancel pending timer
-- `io_loop_register_buffers(loop, iovecs, count)` — `IORING_REGISTER_BUFFERS` for pinned DMA memory
-- `io_loop_register_files(loop, fds, count)` — `IORING_REGISTER_FILES` to skip fd table lookup
+`ioh_loop_t` wraps `struct io_uring` with:
+- `ioh_loop_create(ioh_loop_config_t *cfg)` — ring setup with queue_depth, flags
+- `ioh_loop_destroy(ioh_loop_t *loop)` — cleanup
+- `ioh_loop_run(ioh_loop_t *loop)` — main event loop (blocks)
+- `ioh_loop_stop(ioh_loop_t *loop)` — signal stop via eventfd
+- `ioh_loop_add_timer(loop, ms, callback, data)` — timer via `IORING_OP_TIMEOUT`
+- `ioh_loop_add_linked_timeout(loop, sqe, ms)` — linked timeout via `IORING_OP_LINK_TIMEOUT`
+- `ioh_loop_cancel_timer(loop, timer_id)` — cancel pending timer
+- `ioh_loop_register_buffers(loop, iovecs, count)` — `IORING_REGISTER_BUFFERS` for pinned DMA memory
+- `ioh_loop_register_files(loop, fds, count)` — `IORING_REGISTER_FILES` to skip fd table lookup
 
 ```c
 typedef struct {
@@ -52,7 +52,7 @@ typedef struct {
     uint32_t registered_bufs;    /* number of registered buffers (0 = disabled) */
     uint32_t registered_files;   /* max registered fds (0 = disabled) */
     bool     sqpoll;             /* SQPOLL mode (requires CAP_SYS_ADMIN) */
-} io_loop_config_t;
+} ioh_loop_config_t;
 ```
 
 **io_uring features per operation:**
@@ -105,12 +105,12 @@ void test_loop_restricted_op_rejected(void);     // non-whitelisted op → -EACC
 
 **CMake:**
 ```cmake
-add_library(io_loop STATIC src/core/io_loop.c)
-target_include_directories(io_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(io_loop PUBLIC ${LIBURING_LIBRARIES})
-target_include_directories(io_loop PUBLIC ${LIBURING_INCLUDE_DIRS})
+add_library(ioh_loop STATIC src/core/ioh_loop.c)
+target_include_directories(ioh_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ioh_loop PUBLIC ${LIBURING_LIBRARIES})
+target_include_directories(ioh_loop PUBLIC ${LIBURING_INCLUDE_DIRS})
 
-io_add_test(test_io_loop tests/unit/test_io_loop.c io_loop)
+ioh_add_test(test_ioh_loop tests/unit/test_ioh_loop.c ioh_loop)
 ```
 
 ---
@@ -118,9 +118,9 @@ io_add_test(test_io_loop tests/unit/test_io_loop.c io_loop)
 ### Task 1.2: Connection State Machine
 
 **Files:**
-- Create: `src/core/io_conn.h`
-- Create: `src/core/io_conn.c`
-- Create: `tests/unit/test_io_conn.c`
+- Create: `src/core/ioh_conn.h`
+- Create: `src/core/ioh_conn.c`
+- Create: `tests/unit/test_ioh_conn.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -129,18 +129,18 @@ Connection pool with fixed-size array (compile-time configurable):
 
 ```c
 typedef enum : uint8_t {
-    IO_CONN_FREE = 0,
-    IO_CONN_ACCEPTING,
-    IO_CONN_PROXY_HEADER,
-    IO_CONN_TLS_HANDSHAKE,
-    IO_CONN_HTTP_ACTIVE,
-    IO_CONN_WEBSOCKET,
-    IO_CONN_CLOSING,
-} io_conn_state_t;
+    IOH_CONN_FREE = 0,
+    IOH_CONN_ACCEPTING,
+    IOH_CONN_PROXY_HEADER,
+    IOH_CONN_TLS_HANDSHAKE,
+    IOH_CONN_HTTP_ACTIVE,
+    IOH_CONN_WEBSOCKET,
+    IOH_CONN_CLOSING,
+} ioh_conn_state_t;
 
 typedef struct {
     int fd;
-    io_conn_state_t state;
+    ioh_conn_state_t state;
     uint32_t id;
     struct sockaddr_storage peer_addr;
     struct sockaddr_storage proxy_addr;  /* from PROXY protocol */
@@ -151,14 +151,14 @@ typedef struct {
     size_t recv_len;
     void *protocol_ctx;   /* HTTP/1.1, HTTP/2, or HTTP/3 state */
     void *tls_ctx;        /* WOLFSSL * */
-} io_conn_t;
+} ioh_conn_t;
 ```
 
-- `io_conn_pool_create(max_conns)` / `_destroy()`
-- `io_conn_alloc(pool)` → io_conn_t* (or nullptr if full)
-- `io_conn_free(pool, conn)` — reset and return to pool
-- `io_conn_find(pool, fd)` — lookup by fd
-- `io_conn_transition(conn, new_state)` — validate state transitions
+- `ioh_conn_pool_create(max_conns)` / `_destroy()`
+- `ioh_conn_alloc(pool)` → ioh_conn_t* (or nullptr if full)
+- `ioh_conn_free(pool, conn)` — reset and return to pool
+- `ioh_conn_find(pool, fd)` — lookup by fd
+- `ioh_conn_transition(conn, new_state)` — validate state transitions
 
 **Tests (8):**
 ```c
@@ -177,9 +177,9 @@ void test_conn_state_invalid_transition(void); // FREE→HTTP_ACTIVE rejected
 ### Task 1.3: Server Lifecycle
 
 **Files:**
-- Create: `src/core/io_server.h`
-- Create: `src/core/io_server.c`
-- Create: `tests/unit/test_io_server.c`
+- Create: `src/core/ioh_server.h`
+- Create: `src/core/ioh_server.c`
+- Create: `tests/unit/test_ioh_server.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -198,24 +198,24 @@ typedef struct {
     uint32_t max_header_size;
     uint32_t max_body_size;
     bool proxy_protocol;
-} io_server_config_t;
+} ioh_server_config_t;
 
-[[nodiscard]] io_server_t *io_server_create(const io_server_config_t *cfg);
-void io_server_destroy(io_server_t *srv);
-[[nodiscard]] int io_server_run(io_server_t *srv);    /* blocks */
-void io_server_stop(io_server_t *srv);
+[[nodiscard]] ioh_server_t *ioh_server_create(const ioh_server_config_t *cfg);
+void ioh_server_destroy(ioh_server_t *srv);
+[[nodiscard]] int ioh_server_run(ioh_server_t *srv);    /* blocks */
+void ioh_server_stop(ioh_server_t *srv);
 
 /* Graceful shutdown — drain active connections before stopping */
 typedef enum : uint8_t {
-    IO_SHUTDOWN_IMMEDIATE,  /* close all connections now */
-    IO_SHUTDOWN_DRAIN,      /* stop accepting, drain active, then stop */
-} io_shutdown_mode_t;
+    IOH_SHUTDOWN_IMMEDIATE,  /* close all connections now */
+    IOH_SHUTDOWN_DRAIN,      /* stop accepting, drain active, then stop */
+} ioh_shutdown_mode_t;
 
-[[nodiscard]] int io_server_shutdown(io_server_t *srv, io_shutdown_mode_t mode,
+[[nodiscard]] int ioh_server_shutdown(ioh_server_t *srv, ioh_shutdown_mode_t mode,
                                       uint32_t drain_timeout_ms);
 ```
 
-Server creates: `signal(SIGPIPE, SIG_IGN)` → listen socket → bind → listen → io_loop with multishot accept.
+Server creates: `signal(SIGPIPE, SIG_IGN)` → listen socket → bind → listen → ioh_loop with multishot accept.
 **SIGPIPE must be ignored at startup** — io_uring returns errors on write to closed socket, but
 wolfSSL may trigger SIGPIPE through internal write calls. Without SIG_IGN, server can crash.
 Shutdown DRAIN: cancel multishot accept → transition all conns to DRAINING →
@@ -243,9 +243,9 @@ void test_server_accept_backpressure(void);           // pool full → no accept
 ### Task 1.4: Buffer Pool & Registered Resources
 
 **Files:**
-- Create: `src/core/io_buffer.h`
-- Create: `src/core/io_buffer.c`
-- Create: `tests/unit/test_io_buffer.c`
+- Create: `src/core/ioh_buffer.h`
+- Create: `src/core/ioh_buffer.c`
+- Create: `tests/unit/test_ioh_buffer.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -264,18 +264,18 @@ typedef struct {
     uint32_t reg_buf_count;   /* registered buffers count (0 = disabled) */
     uint32_t reg_buf_size;    /* registered buffer size (default 16384, TLS record) */
     uint32_t reg_file_count;  /* registered file slots (0 = disabled, default = max_connections) */
-} io_bufpool_config_t;
+} ioh_bufpool_config_t;
 
-[[nodiscard]] io_bufpool_t *io_bufpool_create(const io_bufpool_config_t *cfg);
-void io_bufpool_destroy(io_bufpool_t *pool);
-[[nodiscard]] int io_bufpool_register_ring(io_bufpool_t *pool, struct io_uring *ring);
-[[nodiscard]] int io_bufpool_register_bufs(io_bufpool_t *pool, struct io_uring *ring);
-[[nodiscard]] int io_bufpool_register_files(io_bufpool_t *pool, struct io_uring *ring);
-void io_bufpool_return(io_bufpool_t *pool, uint32_t buf_id);
-uint8_t *io_bufpool_get_buf(io_bufpool_t *pool, uint32_t buf_id);
-uint8_t *io_bufpool_get_reg_buf(io_bufpool_t *pool, uint32_t idx);
-[[nodiscard]] int io_bufpool_register_fd(io_bufpool_t *pool, int fd);
-void io_bufpool_unregister_fd(io_bufpool_t *pool, int fd);
+[[nodiscard]] ioh_bufpool_t *ioh_bufpool_create(const ioh_bufpool_config_t *cfg);
+void ioh_bufpool_destroy(ioh_bufpool_t *pool);
+[[nodiscard]] int ioh_bufpool_register_ring(ioh_bufpool_t *pool, struct io_uring *ring);
+[[nodiscard]] int ioh_bufpool_register_bufs(ioh_bufpool_t *pool, struct io_uring *ring);
+[[nodiscard]] int ioh_bufpool_register_files(ioh_bufpool_t *pool, struct io_uring *ring);
+void ioh_bufpool_return(ioh_bufpool_t *pool, uint32_t buf_id);
+uint8_t *ioh_bufpool_get_buf(ioh_bufpool_t *pool, uint32_t buf_id);
+uint8_t *ioh_bufpool_get_reg_buf(ioh_bufpool_t *pool, uint32_t idx);
+[[nodiscard]] int ioh_bufpool_register_fd(ioh_bufpool_t *pool, int fd);
+void ioh_bufpool_unregister_fd(ioh_bufpool_t *pool, int fd);
 ```
 
 **Tests (10):**
@@ -301,9 +301,9 @@ void test_bufpool_unregister_fd(void);            // unregister → slot freed
 ### Task 2.1: wolfSSL Context Management
 
 **Files:**
-- Create: `src/tls/io_tls.h`
-- Create: `src/tls/io_tls.c`
-- Create: `tests/unit/test_io_tls.c`
+- Create: `src/tls/ioh_tls.h`
+- Create: `src/tls/ioh_tls.c`
+- Create: `tests/unit/test_ioh_tls.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -317,15 +317,15 @@ typedef struct {
     bool enable_session_tickets;
     uint32_t session_cache_size;
     const char *alpn;          /* "h2,http/1.1" */
-} io_tls_config_t;
+} ioh_tls_config_t;
 
-[[nodiscard]] io_tls_ctx_t *io_tls_ctx_create(const io_tls_config_t *cfg);
-void io_tls_ctx_destroy(io_tls_ctx_t *ctx);
-[[nodiscard]] int io_tls_accept(io_tls_ctx_t *ctx, io_conn_t *conn);
-[[nodiscard]] int io_tls_read(io_conn_t *conn, uint8_t *buf, size_t len);
-[[nodiscard]] int io_tls_write(io_conn_t *conn, const uint8_t *buf, size_t len);
-void io_tls_shutdown(io_conn_t *conn);
-const char *io_tls_get_alpn(io_conn_t *conn);
+[[nodiscard]] ioh_tls_ctx_t *ioh_tls_ctx_create(const ioh_tls_config_t *cfg);
+void ioh_tls_ctx_destroy(ioh_tls_ctx_t *ctx);
+[[nodiscard]] int ioh_tls_accept(ioh_tls_ctx_t *ctx, ioh_conn_t *conn);
+[[nodiscard]] int ioh_tls_read(ioh_conn_t *conn, uint8_t *buf, size_t len);
+[[nodiscard]] int ioh_tls_write(ioh_conn_t *conn, const uint8_t *buf, size_t len);
+void ioh_tls_shutdown(ioh_conn_t *conn);
+const char *ioh_tls_get_alpn(ioh_conn_t *conn);
 ```
 
 Custom I/O callbacks integrate with io_uring:
@@ -358,7 +358,7 @@ void test_tls_ctx_hot_reload(void);                  // swap CTX, old conns work
 ### Task 2.2: TLS + io_uring Integration
 
 **Files:**
-- Modify: `src/tls/io_tls.c` (add io_uring I/O callback integration)
+- Modify: `src/tls/ioh_tls.c` (add io_uring I/O callback integration)
 - Create: `tests/integration/test_tls_uring.c`
 - Modify: `CMakeLists.txt`
 
@@ -389,12 +389,12 @@ void test_tls_uring_graceful_shutdown(void);    // close_notify
 ### Task 3.1: Request/Response Abstractions
 
 **Files:**
-- Create: `src/http/io_request.h`
-- Create: `src/http/io_request.c`
-- Create: `src/http/io_response.h`
-- Create: `src/http/io_response.c`
-- Create: `tests/unit/test_io_request.c`
-- Create: `tests/unit/test_io_response.c`
+- Create: `src/http/ioh_request.h`
+- Create: `src/http/ioh_request.c`
+- Create: `src/http/ioh_response.h`
+- Create: `src/http/ioh_response.c`
+- Create: `tests/unit/test_ioh_request.c`
+- Create: `tests/unit/test_ioh_response.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -403,18 +403,18 @@ Protocol-independent request/response:
 
 ```c
 typedef struct {
-    io_method_t method;
+    ioh_method_t method;
     const char *path;
     size_t path_len;
     const char *query;
     size_t query_len;
-    io_header_t *headers;
+    ioh_header_t *headers;
     uint32_t header_count;
     const uint8_t *body;
     size_t body_len;
-    io_conn_t *conn;
+    ioh_conn_t *conn;
     /* Path parameters from router */
-    io_param_t params[IO_MAX_PATH_PARAMS];
+    ioh_param_t params[IOH_MAX_PATH_PARAMS];
     uint32_t param_count;
     /* Metadata */
     uint8_t http_version_major;
@@ -424,12 +424,12 @@ typedef struct {
     size_t content_length;
     const char *host;             /* Host header (required for HTTP/1.1) */
     /* Connection info (real client IP after PROXY protocol) */
-    io_conn_info_t *conn_info;
-} io_request_t;
+    ioh_conn_info_t *conn_info;
+} ioh_request_t;
 
 typedef struct {
     uint16_t status;
-    io_header_t *headers;
+    ioh_header_t *headers;
     uint32_t header_count;
     uint32_t header_capacity;
     uint8_t *body;
@@ -437,32 +437,32 @@ typedef struct {
     size_t body_capacity;
     bool headers_sent;
     bool chunked;
-} io_response_t;
+} ioh_response_t;
 
 /* Response helpers */
-[[nodiscard]] int io_respond(io_response_t *resp, uint16_t status,
+[[nodiscard]] int ioh_respond(ioh_response_t *resp, uint16_t status,
                               const char *content_type,
                               const uint8_t *body, size_t body_len);
-[[nodiscard]] int io_respond_json(io_response_t *resp, uint16_t status,
+[[nodiscard]] int ioh_respond_json(ioh_response_t *resp, uint16_t status,
                                    const char *json);
-[[nodiscard]] int io_respond_file(io_response_t *resp, const char *path);
-[[nodiscard]] int io_response_set_header(io_response_t *resp,
+[[nodiscard]] int ioh_respond_file(ioh_response_t *resp, const char *path);
+[[nodiscard]] int ioh_response_set_header(ioh_response_t *resp,
                                           const char *name, const char *value);
 ```
 
 **Request helpers:**
 ```c
 /* Cookie parsing from Cookie header */
-const char *io_request_cookie(const io_request_t *req, const char *name);
+const char *ioh_request_cookie(const ioh_request_t *req, const char *name);
 
 /* Query parameter extraction (from parsed query string) */
-const char *io_request_query(const io_request_t *req, const char *name);
+const char *ioh_request_query(const ioh_request_t *req, const char *name);
 
 /* Content negotiation — Accept header parsing */
-const char *io_request_accepts(const io_request_t *req, const char **types, uint32_t count);
+const char *ioh_request_accepts(const ioh_request_t *req, const char **types, uint32_t count);
 
 /* Form body parsing (application/x-www-form-urlencoded) */
-[[nodiscard]] int io_request_form_value(const io_request_t *req,
+[[nodiscard]] int ioh_request_form_value(const ioh_request_t *req,
                                          const char *name, const char **value);
 ```
 
@@ -493,11 +493,11 @@ void test_response_status_text(void);           // 200→"OK", 404→"Not Found"
 ### Task 3.2: picohttpparser Integration
 
 **Files:**
-- Create: `src/http/io_http1.h`
-- Create: `src/http/io_http1.c`
+- Create: `src/http/ioh_http1.h`
+- Create: `src/http/ioh_http1.c`
 - Add: `src/http/picohttpparser.h` (vendored, ~800 LOC)
 - Add: `src/http/picohttpparser.c` (vendored)
-- Create: `tests/unit/test_io_http1.c`
+- Create: `tests/unit/test_ioh_http1.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -505,11 +505,11 @@ void test_response_status_text(void);           // 200→"OK", 404→"Not Found"
 Wrap picohttpparser's stateless parsing with buffered I/O:
 
 ```c
-[[nodiscard]] int io_http1_parse_request(const uint8_t *buf, size_t len,
-                                          io_request_t *req);
-[[nodiscard]] int io_http1_serialize_response(const io_response_t *resp,
+[[nodiscard]] int ioh_http1_parse_request(const uint8_t *buf, size_t len,
+                                          ioh_request_t *req);
+[[nodiscard]] int ioh_http1_serialize_response(const ioh_response_t *resp,
                                                uint8_t *buf, size_t buf_size);
-[[nodiscard]] int io_http1_decode_chunked(io_chunked_decoder_t *dec,
+[[nodiscard]] int ioh_http1_decode_chunked(ioh_chunked_decoder_t *dec,
                                            uint8_t *buf, size_t *len);
 ```
 
@@ -551,8 +551,8 @@ void test_http1_expect_100_continue(void);              // Expect: 100-continue
 ### Task 3.3: PROXY Protocol Decoder
 
 **Files:**
-- Create: `src/http/io_proxy_proto.h`
-- Create: `src/http/io_proxy_proto.c`
+- Create: `src/http/ioh_proxy_proto.h`
+- Create: `src/http/ioh_proxy_proto.c`
 - Create: `tests/unit/test_proxy_proto.c`
 - Modify: `CMakeLists.txt`
 
@@ -564,11 +564,11 @@ typedef struct {
     bool is_local;       /* LOCAL command (health check) */
     struct sockaddr_storage src_addr;
     struct sockaddr_storage dst_addr;
-} io_proxy_result_t;
+} ioh_proxy_result_t;
 
 /* Returns bytes consumed, -EAGAIN for incomplete, <0 for error */
-[[nodiscard]] int io_proxy_decode(const uint8_t *buf, size_t len,
-                                   io_proxy_result_t *result);
+[[nodiscard]] int ioh_proxy_decode(const uint8_t *buf, size_t len,
+                                   ioh_proxy_result_t *result);
 ```
 
 PPv1: text format `PROXY TCP4 src dst sport dport\r\n`
@@ -628,9 +628,9 @@ path auto-correction (httprouter), conflict detection at registration (matchit/A
 ### Task 4.1: Radix Trie Core
 
 **Files:**
-- Create: `src/router/io_radix.h`
-- Create: `src/router/io_radix.c`
-- Create: `tests/unit/test_io_radix.c`
+- Create: `src/router/ioh_radix.h`
+- Create: `src/router/ioh_radix.c`
+- Create: `tests/unit/test_ioh_radix.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -639,40 +639,40 @@ Internal radix trie (compressed prefix tree) — NOT exposed in public API.
 Separate tree per HTTP method (GET tree, POST tree, etc.) for O(1) method dispatch.
 
 ```c
-/* Internal — src/router/io_radix.h */
+/* Internal — src/router/ioh_radix.h */
 typedef enum : uint8_t {
-    IO_NODE_STATIC,    /* /users/list — highest priority */
-    IO_NODE_PARAM,     /* /:id        — medium priority  */
-    IO_NODE_WILDCARD,  /* /*path      — lowest priority  */
-} io_node_type_t;
+    IOH_NODE_STATIC,    /* /users/list — highest priority */
+    IOH_NODE_PARAM,     /* /:id        — medium priority  */
+    IOH_NODE_WILDCARD,  /* /*path      — lowest priority  */
+} ioh_node_type_t;
 
-typedef struct io_radix_node {
+typedef struct ioh_radix_node {
     char                    *prefix;        /* compressed edge label */
-    io_node_type_t           type;
+    ioh_node_type_t           type;
     char                    *param_name;    /* for PARAM/WILDCARD nodes */
     void                    *handler;       /* opaque, set by router */
     void                    *metadata;      /* route options, oas_operation_t* */
-    struct io_radix_node   **children;      /* sorted by: STATIC > PARAM > WILDCARD */
+    struct ioh_radix_node   **children;      /* sorted by: STATIC > PARAM > WILDCARD */
     uint32_t                 child_count;
     uint32_t                 priority;      /* sum of handles in subtree (httprouter optimization) */
-} io_radix_node_t;
+} ioh_radix_node_t;
 
 typedef struct {
-    io_radix_node_t *root;
-} io_radix_tree_t;
+    ioh_radix_node_t *root;
+} ioh_radix_tree_t;
 
-[[nodiscard]] io_radix_tree_t *io_radix_create(void);
-void io_radix_destroy(io_radix_tree_t *tree);
-[[nodiscard]] int io_radix_insert(io_radix_tree_t *tree, const char *pattern,
+[[nodiscard]] ioh_radix_tree_t *ioh_radix_create(void);
+void ioh_radix_destroy(ioh_radix_tree_t *tree);
+[[nodiscard]] int ioh_radix_insert(ioh_radix_tree_t *tree, const char *pattern,
                                    void *handler, void *metadata);
-[[nodiscard]] int io_radix_lookup(const io_radix_tree_t *tree, const char *path,
-                                   size_t path_len, io_radix_match_t *match);
+[[nodiscard]] int ioh_radix_lookup(const ioh_radix_tree_t *tree, const char *path,
+                                   size_t path_len, ioh_radix_match_t *match);
 ```
 
 Node priority ordering (httprouter pattern): children sorted by number of handles in subtree,
 so most-populated branches are tried first → O(k) average where k = path segments.
 
-**Conflict detection (matchit pattern):** `io_radix_insert()` returns `-EEXIST` if pattern
+**Conflict detection (matchit pattern):** `ioh_radix_insert()` returns `-EEXIST` if pattern
 conflicts with existing route (e.g., `/:id` and `/:name` on same tree level).
 
 **Tests (12):**
@@ -696,9 +696,9 @@ void test_radix_no_match(void);                  // unknown path → nullptr
 ### Task 4.2: Router Public API
 
 **Files:**
-- Create: `include/iohttp/io_router.h`
-- Create: `src/router/io_router.c`
-- Create: `tests/unit/test_io_router.c`
+- Create: `include/iohttp/ioh_router.h`
+- Create: `src/router/ioh_router.c`
+- Create: `tests/unit/test_ioh_router.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -706,46 +706,46 @@ void test_radix_no_match(void);                  // unknown path → nullptr
 Public API wrapping radix trie with per-method trees, auto-405, auto-HEAD, path correction.
 
 ```c
-/* include/iohttp/io_router.h — PUBLIC API */
+/* include/iohttp/ioh_router.h — PUBLIC API */
 
 /* Handler returns int: 0 = success, negative errno = error.
    Error triggers centralized error handler (bunrouter/echo pattern). */
-typedef int (*io_handler_fn)(io_request_t *req, io_response_t *resp);
+typedef int (*ioh_handler_fn)(ioh_request_t *req, ioh_response_t *resp);
 
 /* Route options — extensible metadata per-route (FastAPI-inspired) */
 typedef struct {
     void                *oas_operation;  /* oas_operation_t* for liboas binding */
     uint32_t             permissions;    /* bitmask for auth middleware */
     bool                 auth_required;
-} io_route_opts_t;
+} ioh_route_opts_t;
 
-[[nodiscard]] io_router_t *io_router_create(void);
-void io_router_destroy(io_router_t *router);
+[[nodiscard]] ioh_router_t *ioh_router_create(void);
+void ioh_router_destroy(ioh_router_t *router);
 
 /* Method-specific registration (bunrouter/Express pattern) */
-[[nodiscard]] int io_router_get(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_post(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_put(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_delete(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_patch(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_head(io_router_t *r, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_router_options(io_router_t *r, const char *pattern, io_handler_fn h);
+[[nodiscard]] int ioh_router_get(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_post(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_put(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_delete(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_patch(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_head(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_router_options(ioh_router_t *r, const char *pattern, ioh_handler_fn h);
 
 /* Generic method registration */
-[[nodiscard]] int io_router_handle(io_router_t *r, io_method_t method,
-                                    const char *pattern, io_handler_fn h);
+[[nodiscard]] int ioh_router_handle(ioh_router_t *r, ioh_method_t method,
+                                    const char *pattern, ioh_handler_fn h);
 
 /* Host-based routing / virtual hosts (gorilla/mux pattern) */
-[[nodiscard]] io_router_t *io_router_host(io_router_t *r, const char *host_pattern);
+[[nodiscard]] ioh_router_t *ioh_router_host(ioh_router_t *r, const char *host_pattern);
 /* host_pattern: "api.example.com", "*.example.com" */
 
 /* Registration with route options */
-[[nodiscard]] int io_router_get_with(io_router_t *r, const char *pattern,
-                                      io_handler_fn h, const io_route_opts_t *opts);
+[[nodiscard]] int ioh_router_get_with(ioh_router_t *r, const char *pattern,
+                                      ioh_handler_fn h, const ioh_route_opts_t *opts);
 /* ... _with variants for all methods */
 
 /* Dispatch — returns match result including auto-405/auto-HEAD */
-io_route_match_t io_router_dispatch(const io_router_t *r, io_method_t method,
+ioh_route_match_t ioh_router_dispatch(const ioh_router_t *r, ioh_method_t method,
                                       const char *path, size_t path_len);
 ```
 
@@ -797,9 +797,9 @@ void test_router_no_conflict_diff_method(void);   // GET /:id + POST /:name → 
 ### Task 4.3: Route Groups
 
 **Files:**
-- Create: `src/router/io_route_group.h`
-- Create: `src/router/io_route_group.c`
-- Create: `tests/unit/test_io_route_group.c`
+- Create: `src/router/ioh_route_group.h`
+- Create: `src/router/ioh_route_group.c`
+- Create: `tests/unit/test_ioh_route_group.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -808,34 +808,34 @@ Nested route groups with prefix composition and per-group middleware (Express.Ro
 
 ```c
 /* Route group — composable sub-router with shared prefix + middleware */
-typedef struct io_group io_group_t;
+typedef struct ioh_group ioh_group_t;
 
-[[nodiscard]] io_group_t *io_router_group(io_router_t *r, const char *prefix);
-[[nodiscard]] io_group_t *io_group_subgroup(io_group_t *g, const char *prefix);
+[[nodiscard]] ioh_group_t *ioh_router_group(ioh_router_t *r, const char *prefix);
+[[nodiscard]] ioh_group_t *ioh_group_subgroup(ioh_group_t *g, const char *prefix);
 
 /* Method-specific registration on groups */
-[[nodiscard]] int io_group_get(io_group_t *g, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_group_post(io_group_t *g, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_group_put(io_group_t *g, const char *pattern, io_handler_fn h);
-[[nodiscard]] int io_group_delete(io_group_t *g, const char *pattern, io_handler_fn h);
+[[nodiscard]] int ioh_group_get(ioh_group_t *g, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_group_post(ioh_group_t *g, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_group_put(ioh_group_t *g, const char *pattern, ioh_handler_fn h);
+[[nodiscard]] int ioh_group_delete(ioh_group_t *g, const char *pattern, ioh_handler_fn h);
 /* ... patch, head, options */
 
 /* Attach middleware to group (applies to all routes in group + subgroups) */
-[[nodiscard]] int io_group_use(io_group_t *g, io_middleware_fn mw);
+[[nodiscard]] int ioh_group_use(ioh_group_t *g, ioh_middleware_fn mw);
 ```
 
 **Example usage:**
 ```c
-io_group_t *api = io_router_group(router, "/api");
-io_group_use(api, auth_middleware);
+ioh_group_t *api = ioh_router_group(router, "/api");
+ioh_group_use(api, auth_middleware);
 
-io_group_t *v1 = io_group_subgroup(api, "/v1");
-io_group_get(v1, "/users/:id", get_user);     // → GET /api/v1/users/:id
-io_group_post(v1, "/users", create_user);      // → POST /api/v1/users
+ioh_group_t *v1 = ioh_group_subgroup(api, "/v1");
+ioh_group_get(v1, "/users/:id", get_user);     // → GET /api/v1/users/:id
+ioh_group_post(v1, "/users", create_user);      // → POST /api/v1/users
 
-io_group_t *admin = io_group_subgroup(api, "/admin");
-io_group_use(admin, admin_only_middleware);
-io_group_delete(admin, "/users/:id", del_user); // → DELETE /api/admin/users/:id
+ioh_group_t *admin = ioh_group_subgroup(api, "/admin");
+ioh_group_use(admin, admin_only_middleware);
+ioh_group_delete(admin, "/users/:id", del_user); // → DELETE /api/admin/users/:id
 // middleware chain: auth → admin_only → del_user
 ```
 
@@ -844,13 +844,13 @@ io_group_delete(admin, "/users/:id", del_user); // → DELETE /api/admin/users/:
 void test_group_create(void);
 void test_group_prefix_composition(void);       // /api + /v1 + /users → /api/v1/users
 void test_group_nested_subgroup(void);           // 3-level nesting
-void test_group_method_registration(void);       // io_group_get/post/put/delete
+void test_group_method_registration(void);       // ioh_group_get/post/put/delete
 void test_group_middleware_applied(void);         // group middleware runs for group routes
 void test_group_middleware_not_leaked(void);      // group middleware doesn't affect sibling groups
 void test_group_middleware_inheritance(void);     // subgroup inherits parent middleware
 void test_group_middleware_order(void);           // parent middleware before child middleware
 void test_group_empty(void);                     // group with no routes
-void test_group_with_route_opts(void);           // io_group_get_with() + metadata
+void test_group_with_route_opts(void);           // ioh_group_get_with() + metadata
 ```
 
 ---
@@ -858,30 +858,30 @@ void test_group_with_route_opts(void);           // io_group_get_with() + metada
 ### Task 4.4: Typed Param Extraction
 
 **Files:**
-- Modify: `include/iohttp/io_request.h`
-- Modify: `src/http/io_request.c`
-- Create: `tests/unit/test_io_params.c`
+- Modify: `include/iohttp/ioh_request.h`
+- Modify: `src/http/ioh_request.c`
+- Create: `tests/unit/test_ioh_params.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
-Typed parameter access on `io_request_t` (echo/FastAPI-inspired).
+Typed parameter access on `ioh_request_t` (echo/FastAPI-inspired).
 
 ```c
 /* String param — always available, zero-copy pointer into path */
-const char *io_request_param(const io_request_t *req, const char *name);
+const char *ioh_request_param(const ioh_request_t *req, const char *name);
 
 /* Typed extraction — returns 0 on success, -EINVAL on conversion failure */
-[[nodiscard]] int io_request_param_i64(const io_request_t *req, const char *name, int64_t *out);
-[[nodiscard]] int io_request_param_u64(const io_request_t *req, const char *name, uint64_t *out);
-[[nodiscard]] int io_request_param_bool(const io_request_t *req, const char *name, bool *out);
+[[nodiscard]] int ioh_request_param_i64(const ioh_request_t *req, const char *name, int64_t *out);
+[[nodiscard]] int ioh_request_param_u64(const ioh_request_t *req, const char *name, uint64_t *out);
+[[nodiscard]] int ioh_request_param_bool(const ioh_request_t *req, const char *name, bool *out);
 
 /* Param count */
-uint32_t io_request_param_count(const io_request_t *req);
+uint32_t ioh_request_param_count(const ioh_request_t *req);
 
 /* Query params (separate from path params) */
-const char *io_request_query(const io_request_t *req, const char *name);
-[[nodiscard]] int io_request_query_i64(const io_request_t *req, const char *name, int64_t *out);
+const char *ioh_request_query(const ioh_request_t *req, const char *name);
+[[nodiscard]] int ioh_request_query_i64(const ioh_request_t *req, const char *name, int64_t *out);
 ```
 
 **Tests (10):**
@@ -903,9 +903,9 @@ void test_param_wildcard(void);              // /static/*path → "js/app.css"
 ### Task 4.5: Route Introspection & liboas Binding
 
 **Files:**
-- Create: `src/router/io_route_inspect.h`
-- Create: `src/router/io_route_inspect.c`
-- Create: `tests/unit/test_io_route_inspect.c`
+- Create: `src/router/ioh_route_inspect.h`
+- Create: `src/router/ioh_route_inspect.c`
+- Create: `tests/unit/test_ioh_route_inspect.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -915,23 +915,23 @@ Route walking for documentation generation + liboas binding (gorilla/mux + FastA
 ```c
 /* Route info returned during walk */
 typedef struct {
-    io_method_t     method;
+    ioh_method_t     method;
     const char     *pattern;        /* original pattern string */
-    io_handler_fn   handler;
-    const io_route_opts_t *opts;    /* metadata, oas_operation, permissions */
-} io_route_info_t;
+    ioh_handler_fn   handler;
+    const ioh_route_opts_t *opts;    /* metadata, oas_operation, permissions */
+} ioh_route_info_t;
 
 /* Walk callback — called for each registered route */
-typedef int (*io_route_walk_fn)(const io_route_info_t *info, void *ctx);
+typedef int (*ioh_route_walk_fn)(const ioh_route_info_t *info, void *ctx);
 
 /* Walk all routes — useful for docs generation, /openapi.json, debug logging */
-[[nodiscard]] int io_router_walk(const io_router_t *r, io_route_walk_fn fn, void *ctx);
+[[nodiscard]] int ioh_router_walk(const ioh_router_t *r, ioh_route_walk_fn fn, void *ctx);
 
 /* Count registered routes */
-uint32_t io_router_route_count(const io_router_t *r);
+uint32_t ioh_router_route_count(const ioh_router_t *r);
 
 /* Bind oas_operation_t* to existing route (alternative to _with registration) */
-[[nodiscard]] int io_router_set_metadata(io_router_t *r, io_method_t method,
+[[nodiscard]] int ioh_router_set_metadata(ioh_router_t *r, ioh_method_t method,
                                           const char *pattern, void *metadata);
 ```
 
@@ -950,9 +950,9 @@ void test_route_metadata_in_match(void);     // metadata available in dispatch r
 ### Task 4.6: Middleware Chain
 
 **Files:**
-- Create: `include/iohttp/io_middleware.h`
-- Create: `src/middleware/io_middleware.c`
-- Create: `tests/unit/test_io_middleware.c`
+- Create: `include/iohttp/ioh_middleware.h`
+- Create: `src/middleware/ioh_middleware.c`
+- Create: `tests/unit/test_ioh_middleware.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -960,19 +960,19 @@ void test_route_metadata_in_match(void);     // metadata available in dispatch r
 ```c
 /* Middleware signature — calls next() to continue chain, or returns to short-circuit.
    Return: 0 = success, negative errno = error → centralized error handler. */
-typedef int (*io_middleware_fn)(io_request_t *req, io_response_t *resp,
-                                 io_next_fn next);
+typedef int (*ioh_middleware_fn)(ioh_request_t *req, ioh_response_t *resp,
+                                 ioh_next_fn next);
 
 /* Global middleware — runs for all routes */
-[[nodiscard]] int io_router_use(io_router_t *r, io_middleware_fn mw);
+[[nodiscard]] int ioh_router_use(ioh_router_t *r, ioh_middleware_fn mw);
 
 /* Error handler — called when handler or middleware returns non-zero */
-typedef int (*io_error_handler_fn)(io_request_t *req, io_response_t *resp, int error);
-void io_router_set_error_handler(io_router_t *r, io_error_handler_fn h);
+typedef int (*ioh_error_handler_fn)(ioh_request_t *req, ioh_response_t *resp, int error);
+void ioh_router_set_error_handler(ioh_router_t *r, ioh_error_handler_fn h);
 
 /* Custom 404/405 handlers (httprouter pattern) */
-void io_router_set_not_found(io_router_t *r, io_handler_fn h);
-void io_router_set_method_not_allowed(io_router_t *r, io_handler_fn h);
+void ioh_router_set_not_found(ioh_router_t *r, ioh_handler_fn h);
+void ioh_router_set_method_not_allowed(ioh_router_t *r, ioh_handler_fn h);
 ```
 
 Chain execution: global_mw[0] → global_mw[1] → group_mw[0] → group_mw[1] → handler.
@@ -998,14 +998,14 @@ void test_middleware_global_plus_group(void);  // global mw runs before group mw
 ### Task 4.7: Built-in Middleware
 
 **Files:**
-- Create: `src/middleware/io_cors.h` + `io_cors.c`
-- Create: `src/middleware/io_ratelimit.h` + `io_ratelimit.c`
-- Create: `src/middleware/io_security.h` + `io_security.c`
-- Create: `src/middleware/io_auth.h` + `io_auth.c`
-- Create: `tests/unit/test_io_cors.c`
-- Create: `tests/unit/test_io_ratelimit.c`
-- Create: `tests/unit/test_io_security.c`
-- Create: `tests/unit/test_io_auth.c`
+- Create: `src/middleware/ioh_cors.h` + `ioh_cors.c`
+- Create: `src/middleware/ioh_ratelimit.h` + `ioh_ratelimit.c`
+- Create: `src/middleware/ioh_security.h` + `ioh_security.c`
+- Create: `src/middleware/ioh_auth.h` + `ioh_auth.c`
+- Create: `tests/unit/test_ioh_cors.c`
+- Create: `tests/unit/test_ioh_ratelimit.c`
+- Create: `tests/unit/test_ioh_security.c`
+- Create: `tests/unit/test_ioh_auth.c`
 - Modify: `CMakeLists.txt`
 
 **CORS (100-200 LOC):**
@@ -1016,9 +1016,9 @@ typedef struct {
     const char **allowed_headers;
     bool allow_credentials;
     uint32_t max_age_seconds;
-} io_cors_config_t;
+} ioh_cors_config_t;
 
-[[nodiscard]] io_middleware_fn io_cors_middleware(const io_cors_config_t *cfg);
+[[nodiscard]] ioh_middleware_fn ioh_cors_middleware(const ioh_cors_config_t *cfg);
 ```
 
 **Rate limiting + Slowloris defense (300-500 LOC) — token bucket per IP + slow client protection:**
@@ -1028,13 +1028,13 @@ typedef struct {
     uint32_t burst;
     uint32_t max_connections_per_ip;     /* default 10, prevents Slowloris connection exhaustion */
     uint32_t min_transfer_rate_bps;     /* minimum bytes/sec for request body, 0 = disabled */
-} io_ratelimit_config_t;
+} ioh_ratelimit_config_t;
 
-[[nodiscard]] io_middleware_fn io_ratelimit_middleware(const io_ratelimit_config_t *cfg);
+[[nodiscard]] ioh_middleware_fn ioh_ratelimit_middleware(const ioh_ratelimit_config_t *cfg);
 ```
 
 Slowloris/Slow POST defense integrated with io_uring linked timeouts:
-- Header read timeout 5-15s via `io_uring_prep_link_timeout()` (already in io_loop)
+- Header read timeout 5-15s via `io_uring_prep_link_timeout()` (already in ioh_loop)
 - Minimum transfer rate enforcement for POST/PUT bodies
 - Per-IP connection limits (max_connections_per_ip)
 
@@ -1046,17 +1046,17 @@ typedef struct {
     uint32_t hsts_max_age;
     const char *frame_options;          /* DENY or SAMEORIGIN */
     const char *referrer_policy;
-} io_security_config_t;
+} ioh_security_config_t;
 
-[[nodiscard]] io_middleware_fn io_security_middleware(const io_security_config_t *cfg);
+[[nodiscard]] ioh_middleware_fn ioh_security_middleware(const ioh_security_config_t *cfg);
 ```
 
 **Auth (200-400 LOC):**
 ```c
-typedef bool (*io_auth_verify_fn)(const char *credentials, void *ctx);
+typedef bool (*ioh_auth_verify_fn)(const char *credentials, void *ctx);
 
-[[nodiscard]] io_middleware_fn io_auth_basic(io_auth_verify_fn verify, void *ctx);
-[[nodiscard]] io_middleware_fn io_auth_bearer(io_auth_verify_fn verify, void *ctx);
+[[nodiscard]] ioh_middleware_fn ioh_auth_basic(ioh_auth_verify_fn verify, void *ctx);
+[[nodiscard]] ioh_middleware_fn ioh_auth_bearer(ioh_auth_verify_fn verify, void *ctx);
 ```
 
 **Tests (24 total, ~6 per module):**
@@ -1105,9 +1105,9 @@ void test_auth_bearer_missing(void);
 ### Task 5.1: Static File Server
 
 **Files:**
-- Create: `src/static/io_static.h`
-- Create: `src/static/io_static.c`
-- Create: `tests/unit/test_io_static.c`
+- Create: `src/static/ioh_static.h`
+- Create: `src/static/ioh_static.c`
+- Create: `tests/unit/test_ioh_static.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1118,10 +1118,10 @@ typedef struct {
     bool directory_listing;        /* default false */
     bool etag;                     /* ETag generation */
     uint32_t max_age_default;      /* Cache-Control max-age */
-} io_static_config_t;
+} ioh_static_config_t;
 
-[[nodiscard]] int io_route_static(io_server_t *srv, const char *prefix,
-                                    const io_static_config_t *cfg);
+[[nodiscard]] int ioh_route_static(ioh_server_t *srv, const char *prefix,
+                                    const ioh_static_config_t *cfg);
 ```
 
 Features:
@@ -1153,9 +1153,9 @@ void test_static_not_found(void);               // 404
 ### Task 5.2: SPA Fallback
 
 **Files:**
-- Create: `src/static/io_spa.h`
-- Create: `src/static/io_spa.c`
-- Create: `tests/unit/test_io_spa.c`
+- Create: `src/static/ioh_spa.h`
+- Create: `src/static/ioh_spa.c`
+- Create: `tests/unit/test_ioh_spa.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1167,9 +1167,9 @@ typedef struct {
     const char **api_prefixes;             /* paths excluded from fallback */
     uint32_t api_prefix_count;
     const char *immutable_pattern;         /* regex for hashed assets */
-} io_spa_config_t;
+} ioh_spa_config_t;
 
-#define IO_STATIC_SPA (1 << 0)  /* flag for io_route_static() */
+#define IOH_STATIC_SPA (1 << 0)  /* flag for ioh_route_static() */
 ```
 
 SPA fallback logic:
@@ -1198,9 +1198,9 @@ void test_spa_file_with_extension(void);      // /style.css → serve if exists,
 ### Task 5.3: Compression
 
 **Files:**
-- Create: `src/static/io_compress.h`
-- Create: `src/static/io_compress.c`
-- Create: `tests/unit/test_io_compress.c`
+- Create: `src/static/ioh_compress.h`
+- Create: `src/static/ioh_compress.c`
+- Create: `tests/unit/test_ioh_compress.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1216,9 +1216,9 @@ typedef struct {
     bool enable_precompressed;     /* serve .gz/.br files */
     uint32_t min_size;             /* don't compress below this (default 1024) */
     int compression_level;         /* 1-9 for gzip, 0-11 for brotli */
-} io_compress_config_t;
+} ioh_compress_config_t;
 
-[[nodiscard]] io_middleware_fn io_compress_middleware(const io_compress_config_t *cfg);
+[[nodiscard]] ioh_middleware_fn ioh_compress_middleware(const ioh_compress_config_t *cfg);
 ```
 
 **Tests (8):**
@@ -1236,9 +1236,9 @@ void test_compress_below_min_size(void);         // skip small responses
 ### Task 5.4: Multipart/Form-Data Parser
 
 **Files:**
-- Create: `src/http/io_multipart.h`
-- Create: `src/http/io_multipart.c`
-- Create: `tests/unit/test_io_multipart.c`
+- Create: `src/http/ioh_multipart.h`
+- Create: `src/http/ioh_multipart.c`
+- Create: `tests/unit/test_ioh_multipart.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1252,18 +1252,18 @@ typedef struct {
     const char *content_type;  /* part content-type */
     const uint8_t *data;       /* part body (zero-copy pointer) */
     size_t data_len;
-} io_multipart_part_t;
+} ioh_multipart_part_t;
 
 typedef struct {
     uint32_t max_parts;        /* default 64 */
     size_t max_part_size;      /* default 10MB */
     size_t max_total_size;     /* default 50MB */
-} io_multipart_config_t;
+} ioh_multipart_config_t;
 
 /* Parse all parts from multipart body */
-[[nodiscard]] int io_multipart_parse(const io_request_t *req,
-                                      const io_multipart_config_t *cfg,
-                                      io_multipart_part_t *parts,
+[[nodiscard]] int ioh_multipart_parse(const ioh_request_t *req,
+                                      const ioh_multipart_config_t *cfg,
+                                      ioh_multipart_part_t *parts,
                                       uint32_t *part_count);
 ```
 
@@ -1288,32 +1288,32 @@ void test_multipart_malformed(void);             // broken boundary → error
 ### Task 6.1: WebSocket
 
 **Files:**
-- Create: `src/ws/io_websocket.h`
-- Create: `src/ws/io_websocket.c`
-- Create: `tests/unit/test_io_websocket.c`
+- Create: `src/ws/ioh_websocket.h`
+- Create: `src/ws/ioh_websocket.c`
+- Create: `tests/unit/test_ioh_websocket.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
 ```c
 typedef struct {
-    void (*on_open)(io_ws_conn_t *ws, void *ctx);
-    void (*on_message)(io_ws_conn_t *ws, const uint8_t *data,
+    void (*on_open)(ioh_ws_conn_t *ws, void *ctx);
+    void (*on_message)(ioh_ws_conn_t *ws, const uint8_t *data,
                         size_t len, bool is_text, void *ctx);
-    void (*on_close)(io_ws_conn_t *ws, uint16_t code,
+    void (*on_close)(ioh_ws_conn_t *ws, uint16_t code,
                       const char *reason, void *ctx);
-    void (*on_ping)(io_ws_conn_t *ws, const uint8_t *data,
+    void (*on_ping)(ioh_ws_conn_t *ws, const uint8_t *data,
                      size_t len, void *ctx);
     uint32_t ping_interval_ms;
     uint32_t pong_timeout_ms;
     size_t max_message_size;
-} io_ws_config_t;
+} ioh_ws_config_t;
 
-[[nodiscard]] int io_ws_upgrade(io_request_t *req, io_response_t *resp,
-                                 const io_ws_config_t *cfg, void *ctx);
-[[nodiscard]] int io_ws_send_text(io_ws_conn_t *ws, const char *msg, size_t len);
-[[nodiscard]] int io_ws_send_binary(io_ws_conn_t *ws, const uint8_t *data, size_t len);
-[[nodiscard]] int io_ws_close(io_ws_conn_t *ws, uint16_t code, const char *reason);
+[[nodiscard]] int ioh_ws_upgrade(ioh_request_t *req, ioh_response_t *resp,
+                                 const ioh_ws_config_t *cfg, void *ctx);
+[[nodiscard]] int ioh_ws_send_text(ioh_ws_conn_t *ws, const char *msg, size_t len);
+[[nodiscard]] int ioh_ws_send_binary(ioh_ws_conn_t *ws, const uint8_t *data, size_t len);
+[[nodiscard]] int ioh_ws_close(ioh_ws_conn_t *ws, uint16_t code, const char *reason);
 ```
 
 Features:
@@ -1346,9 +1346,9 @@ void test_ws_frame_decode(void);                // frame parsing
 ### Task 6.2: Server-Sent Events
 
 **Files:**
-- Create: `src/ws/io_sse.h`
-- Create: `src/ws/io_sse.c`
-- Create: `tests/unit/test_io_sse.c`
+- Create: `src/ws/ioh_sse.h`
+- Create: `src/ws/ioh_sse.c`
+- Create: `tests/unit/test_ioh_sse.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1359,13 +1359,13 @@ typedef struct {
     const char *data;     /* event data (required) */
     const char *id;       /* event ID (optional) */
     uint32_t retry_ms;    /* reconnect hint (optional, 0 = omit) */
-} io_sse_event_t;
+} ioh_sse_event_t;
 
-[[nodiscard]] int io_sse_start(io_request_t *req, io_response_t *resp,
-                                io_sse_stream_t **stream);
-[[nodiscard]] int io_sse_send(io_sse_stream_t *stream, const io_sse_event_t *event);
-[[nodiscard]] int io_sse_send_comment(io_sse_stream_t *stream, const char *comment);
-void io_sse_close(io_sse_stream_t *stream);
+[[nodiscard]] int ioh_sse_start(ioh_request_t *req, ioh_response_t *resp,
+                                ioh_sse_stream_t **stream);
+[[nodiscard]] int ioh_sse_send(ioh_sse_stream_t *stream, const ioh_sse_event_t *event);
+[[nodiscard]] int ioh_sse_send_comment(ioh_sse_stream_t *stream, const char *comment);
+void ioh_sse_close(ioh_sse_stream_t *stream);
 ```
 
 Features:
@@ -1396,9 +1396,9 @@ void test_sse_close(void);
 ### Task 7.1: nghttp2 Session Management
 
 **Files:**
-- Create: `src/http/io_http2.h`
-- Create: `src/http/io_http2.c`
-- Create: `tests/unit/test_io_http2.c`
+- Create: `src/http/ioh_http2.h`
+- Create: `src/http/ioh_http2.c`
+- Create: `tests/unit/test_ioh_http2.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1410,18 +1410,18 @@ typedef struct {
     uint32_t max_frame_size;           /* default 16384 */
     uint32_t max_header_list_size;     /* default 8192 */
     uint32_t max_rst_stream_per_sec;   /* default 100, Rapid Reset rate limit */
-} io_http2_config_t;
+} ioh_http2_config_t;
 
-[[nodiscard]] io_http2_session_t *io_http2_session_create(
-    io_conn_t *conn, const io_http2_config_t *cfg);
-void io_http2_session_destroy(io_http2_session_t *session);
-[[nodiscard]] int io_http2_on_recv(io_http2_session_t *session,
+[[nodiscard]] ioh_http2_session_t *ioh_http2_session_create(
+    ioh_conn_t *conn, const ioh_http2_config_t *cfg);
+void ioh_http2_session_destroy(ioh_http2_session_t *session);
+[[nodiscard]] int ioh_http2_on_recv(ioh_http2_session_t *session,
                                     const uint8_t *data, size_t len);
-[[nodiscard]] int io_http2_flush(io_http2_session_t *session);
+[[nodiscard]] int ioh_http2_flush(ioh_http2_session_t *session);
 ```
 
 nghttp2 callback integration:
-- `on_begin_headers_callback` → allocate io_request_t per stream
+- `on_begin_headers_callback` → allocate ioh_request_t per stream
 - `on_header_callback` → collect headers into request
 - `on_data_chunk_recv_callback` → accumulate body
 - `on_frame_recv_callback` → dispatch to router when END_STREAM received
@@ -1448,8 +1448,8 @@ void test_http2_rapid_reset_protection(void);   // excessive RST_STREAM rate →
 ### Task 7.2: ALPN-Based Protocol Selection
 
 **Files:**
-- Modify: `src/tls/io_tls.c` (ALPN callback)
-- Modify: `src/core/io_conn.c` (protocol dispatch after ALPN)
+- Modify: `src/tls/ioh_tls.c` (ALPN callback)
+- Modify: `src/core/ioh_conn.c` (protocol dispatch after ALPN)
 - Create: `tests/integration/test_http2_server.c`
 - Modify: `CMakeLists.txt`
 
@@ -1478,21 +1478,21 @@ void test_http2_server_push(void);              // optional: server push
 ### Task 8.1: QUIC Transport (ngtcp2)
 
 **Files:**
-- Create: `src/http/io_quic.h`
-- Create: `src/http/io_quic.c`
-- Create: `src/tls/io_tls_quic.h`
-- Create: `src/tls/io_tls_quic.c`
-- Create: `tests/unit/test_io_quic.c`
+- Create: `src/http/ioh_quic.h`
+- Create: `src/http/ioh_quic.c`
+- Create: `src/tls/ioh_tls_quic.h`
+- Create: `src/tls/ioh_tls_quic.c`
+- Create: `tests/unit/test_ioh_quic.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
 ```c
 typedef enum : uint8_t {
-    IO_QUIC_CC_CUBIC,       /* default, good for stable networks */
-    IO_QUIC_CC_NEWRENO,     /* simple, RFC-compliant */
-    IO_QUIC_CC_BBR2,        /* best for lossy/mobile networks: ~21% better p99 latency */
-} io_quic_cc_algo_t;
+    IOH_QUIC_CC_CUBIC,       /* default, good for stable networks */
+    IOH_QUIC_CC_NEWRENO,     /* simple, RFC-compliant */
+    IOH_QUIC_CC_BBR2,        /* best for lossy/mobile networks: ~21% better p99 latency */
+} ioh_quic_cc_algo_t;
 
 typedef struct {
     uint32_t max_streams_bidi;       /* default 100 */
@@ -1501,16 +1501,16 @@ typedef struct {
     bool enable_0rtt;
     bool enable_gso;                 /* UDP GSO for batch send (Linux 4.18+) */
     bool enable_gro;                 /* UDP GRO for batch recv (Linux 5.0+) */
-    io_quic_cc_algo_t cc_algo;       /* congestion control algorithm */
-} io_quic_config_t;
+    ioh_quic_cc_algo_t cc_algo;       /* congestion control algorithm */
+} ioh_quic_config_t;
 
-[[nodiscard]] io_quic_server_t *io_quic_server_create(
-    const io_quic_config_t *cfg, io_tls_ctx_t *tls);
-void io_quic_server_destroy(io_quic_server_t *srv);
-[[nodiscard]] int io_quic_on_recv(io_quic_server_t *srv,
+[[nodiscard]] ioh_quic_server_t *ioh_quic_server_create(
+    const ioh_quic_config_t *cfg, ioh_tls_ctx_t *tls);
+void ioh_quic_server_destroy(ioh_quic_server_t *srv);
+[[nodiscard]] int ioh_quic_on_recv(ioh_quic_server_t *srv,
                                     const uint8_t *data, size_t len,
                                     const struct sockaddr *remote);
-[[nodiscard]] int io_quic_flush(io_quic_server_t *srv);
+[[nodiscard]] int ioh_quic_flush(ioh_quic_server_t *srv);
 ```
 
 Uses `ngtcp2_crypto_wolfssl_configure_server_context()` for QUIC crypto.
@@ -1528,7 +1528,7 @@ Implement CID-to-connection lookup (hash table) for O(1) packet routing to `ngtc
 handle PATH_CHALLENGE/PATH_RESPONSE, update CID mapping on migration, validate new path.
 
 **Congestion control:** ngtcp2 supports CUBIC (default), NewReno, BBRv2. BBRv2 gives ~21% better
-p99 latency on lossy networks (mobile clients). Configurable via `io_quic_cc_algo_t`.
+p99 latency on lossy networks (mobile clients). Configurable via `ioh_quic_cc_algo_t`.
 
 **Tests (8):**
 ```c
@@ -1552,23 +1552,23 @@ void test_quic_cc_bbr2(void);                  // BBRv2 selection
 ### Task 8.2: HTTP/3 (nghttp3)
 
 **Files:**
-- Create: `src/http/io_http3.h`
-- Create: `src/http/io_http3.c`
-- Create: `tests/unit/test_io_http3.c`
+- Create: `src/http/ioh_http3.h`
+- Create: `src/http/ioh_http3.c`
+- Create: `tests/unit/test_ioh_http3.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
 ```c
-[[nodiscard]] io_http3_session_t *io_http3_session_create(
-    io_quic_conn_t *quic_conn, const io_http2_config_t *cfg);
-void io_http3_session_destroy(io_http3_session_t *session);
-[[nodiscard]] int io_http3_on_stream_data(io_http3_session_t *session,
+[[nodiscard]] ioh_http3_session_t *ioh_http3_session_create(
+    ioh_quic_conn_t *quic_conn, const ioh_http2_config_t *cfg);
+void ioh_http3_session_destroy(ioh_http3_session_t *session);
+[[nodiscard]] int ioh_http3_on_stream_data(ioh_http3_session_t *session,
                                            int64_t stream_id,
                                            const uint8_t *data, size_t len);
 ```
 
-nghttp3 callbacks → io_request_t → router → handler → nghttp3 response submission.
+nghttp3 callbacks → ioh_request_t → router → handler → nghttp3 response submission.
 
 **Tests (8):**
 ```c
@@ -1608,20 +1608,20 @@ void test_http3_alt_svc_advertisement(void);      // h3 advertised in HTTP/1.1
 ### Task 9.1: JSON API Helpers (yyjson)
 
 **Files:**
-- Create: `src/core/io_json.h`
-- Create: `src/core/io_json.c`
-- Create: `tests/unit/test_io_json.c`
+- Create: `src/core/ioh_json.h`
+- Create: `src/core/ioh_json.c`
+- Create: `tests/unit/test_ioh_json.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
 
 ```c
-[[nodiscard]] int io_respond_json(io_response_t *resp, uint16_t status,
+[[nodiscard]] int ioh_respond_json(ioh_response_t *resp, uint16_t status,
                                    const char *json);
-[[nodiscard]] int io_respond_json_obj(io_response_t *resp, uint16_t status,
+[[nodiscard]] int ioh_respond_json_obj(ioh_response_t *resp, uint16_t status,
                                        yyjson_mut_doc *doc);
-[[nodiscard]] yyjson_doc *io_request_json(io_request_t *req);
-[[nodiscard]] int io_respond_error(io_response_t *resp, uint16_t status,
+[[nodiscard]] yyjson_doc *ioh_request_json(ioh_request_t *req);
+[[nodiscard]] int ioh_respond_error(ioh_response_t *resp, uint16_t status,
                                     const char *error_code, const char *message);
 ```
 
@@ -1647,9 +1647,9 @@ void test_json_large_body(void);                // streaming for large JSON
 ### Task 9.2: Structured Logging
 
 **Files:**
-- Create: `src/middleware/io_logging.h`
-- Create: `src/middleware/io_logging.c`
-- Create: `tests/unit/test_io_logging.c`
+- Create: `src/middleware/ioh_logging.h`
+- Create: `src/middleware/ioh_logging.c`
+- Create: `tests/unit/test_ioh_logging.c`
 - Modify: `CMakeLists.txt`
 
 **Tests (6):**
@@ -1667,9 +1667,9 @@ void test_logging_tls_info(void);               // TLS version in log
 ### Task 9.3: Prometheus Metrics
 
 **Files:**
-- Create: `src/middleware/io_metrics.h`
-- Create: `src/middleware/io_metrics.c`
-- Create: `tests/unit/test_io_metrics.c`
+- Create: `src/middleware/ioh_metrics.h`
+- Create: `src/middleware/ioh_metrics.c`
+- Create: `tests/unit/test_ioh_metrics.c`
 - Modify: `CMakeLists.txt`
 
 **Implementation:**
@@ -1680,31 +1680,31 @@ On `/metrics` scrape, a dedicated thread iterates thread-local blocks, aggregate
 without locks, serializes to Prometheus text exposition format.
 
 ```
-# HELP io_http_requests_total Total HTTP requests
-# TYPE io_http_requests_total counter
-io_http_requests_total{method="GET",status="200"} 1234
+# HELP ioh_http_requests_total Total HTTP requests
+# TYPE ioh_http_requests_total counter
+ioh_http_requests_total{method="GET",status="200"} 1234
 
-# HELP io_http_connections_active Active connections by protocol
-# TYPE io_http_connections_active gauge
-io_http_connections_active{protocol="h1"} 30
-io_http_connections_active{protocol="h2"} 10
-io_http_connections_active{protocol="h3"} 2
+# HELP ioh_http_connections_active Active connections by protocol
+# TYPE ioh_http_connections_active gauge
+ioh_http_connections_active{protocol="h1"} 30
+ioh_http_connections_active{protocol="h2"} 10
+ioh_http_connections_active{protocol="h3"} 2
 
-# HELP io_http_request_duration_seconds Request duration
-# TYPE io_http_request_duration_seconds histogram
-io_http_request_duration_seconds_bucket{le="0.01"} 900
+# HELP ioh_http_request_duration_seconds Request duration
+# TYPE ioh_http_request_duration_seconds histogram
+ioh_http_request_duration_seconds_bucket{le="0.01"} 900
 
-# HELP io_tls_handshake_duration_seconds TLS handshake duration
-# TYPE io_tls_handshake_duration_seconds histogram
-io_tls_handshake_duration_seconds_bucket{le="0.05"} 800
+# HELP ioh_tls_handshake_duration_seconds TLS handshake duration
+# TYPE ioh_tls_handshake_duration_seconds histogram
+ioh_tls_handshake_duration_seconds_bucket{le="0.05"} 800
 
 # HELP io_uring_sqe_submitted_total Total SQEs submitted
 # TYPE io_uring_sqe_submitted_total counter
 io_uring_sqe_submitted_total 50000
 
-# HELP io_bufpool_available Available buffers in provided buffer ring
-# TYPE io_bufpool_available gauge
-io_bufpool_available 96
+# HELP ioh_bufpool_available Available buffers in provided buffer ring
+# TYPE ioh_bufpool_available gauge
+ioh_bufpool_available 96
 ```
 
 Built-in endpoints:
@@ -1816,10 +1816,10 @@ The iohttp router synthesizes best practices from the most influential HTTP rout
 | Route groups + prefix | Express.Router (Node) | 2010 | Nested groups with middleware inheritance |
 | next() middleware chain | Express (Node) | 2010 | Short-circuit or continue chain |
 | Handler returns error | bunrouter / echo (Go) | 2021 | int return → centralized error handler |
-| Method-specific registration | Sinatra / Flask / echo | 2007 | io_router_get(), io_router_post(), ... |
+| Method-specific registration | Sinatra / Flask / echo | 2007 | ioh_router_get(), ioh_router_post(), ... |
 | Conflict detection | matchit / Axum (Rust) | 2021 | /:id + /:name → error at registration |
-| Route introspection / walking | gorilla/mux (Go) | 2012 | io_router_walk() for docs generation |
-| Typed param extraction | echo / FastAPI | 2015 | io_request_param_i64(), _u64(), _bool() |
+| Route introspection / walking | gorilla/mux (Go) | 2012 | ioh_router_walk() for docs generation |
+| Typed param extraction | echo / FastAPI | 2015 | ioh_request_param_i64(), _u64(), _bool() |
 | Route metadata attachment | FastAPI (Python) | 2018 | oas_operation_t* per route for OpenAPI |
 | Param regex constraints | FastRoute | 2014 | NOT adopted (YAGNI — use typed extraction) |
 | Named routes / URL reversal | gorilla/mux | 2012 | NOT adopted (YAGNI for embedded C server) |
@@ -1833,15 +1833,15 @@ liboas is a **separate project** — an OpenAPI 3.2.0 library that integrates wi
 the already-matched `oas_operation_t*` via route metadata — no second path matching in hot path.
 
 **Integration points in iohttp:**
-- `io_route_opts_t.oas_operation` — pointer to compiled operation metadata
-- `io_router_walk()` — route introspection for OpenAPI spec generation
-- `io_tls_peer_info_t` — normalized TLS/mTLS metadata for security context
-- `io_conn_info_t` — real client IP (after PROXY protocol) for security context
+- `ioh_route_opts_t.oas_operation` — pointer to compiled operation metadata
+- `ioh_router_walk()` — route introspection for OpenAPI spec generation
+- `ioh_tls_peer_info_t` — normalized TLS/mTLS metadata for security context
+- `ioh_conn_info_t` — real client IP (after PROXY protocol) for security context
 - Middleware hooks — pre-handler request validation, post-handler response validation
 
 **What iohttp provides to liboas (via adapter):**
-- `io_request_t` → `oas_runtime_request_t` mapping
-- `io_response_t` → `oas_runtime_response_t` mapping
+- `ioh_request_t` → `oas_runtime_request_t` mapping
+- `ioh_response_t` → `oas_runtime_response_t` mapping
 - TLS/auth/proxy context → `oas_security_ctx_t` mapping
 - `/openapi.json` publish helper
 

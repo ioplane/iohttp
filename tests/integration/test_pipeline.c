@@ -3,10 +3,10 @@
  * @brief End-to-end integration tests: real TCP connections through server pipeline.
  */
 
-#include "core/io_ctx.h"
-#include "core/io_server.h"
-#include "http/io_request.h"
-#include "router/io_router.h"
+#include "core/ioh_ctx.h"
+#include "core/ioh_server.h"
+#include "http/ioh_request.h"
+#include "router/ioh_router.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -85,51 +85,51 @@ static ssize_t recv_response(int fd, char *buf, size_t cap)
 
 /* ---- Handlers ---- */
 
-static int hello_handler(io_ctx_t *c)
+static int hello_handler(ioh_ctx_t *c)
 {
-    return io_ctx_text(c, 200, "Hello, World!");
+    return ioh_ctx_text(c, 200, "Hello, World!");
 }
 
-static int echo_handler(io_ctx_t *c)
+static int echo_handler(ioh_ctx_t *c)
 {
     size_t body_len = 0;
-    const uint8_t *body = io_ctx_body(c, &body_len);
-    return io_ctx_blob(c, 200, "application/octet-stream", body, body_len);
+    const uint8_t *body = ioh_ctx_body(c, &body_len);
+    return ioh_ctx_blob(c, 200, "application/octet-stream", body, body_len);
 }
 
-static int callback_handler(io_ctx_t *c, void *user_data)
+static int callback_handler(ioh_ctx_t *c, void *user_data)
 {
     (void)user_data;
-    return io_ctx_text(c, 200, "callback");
+    return ioh_ctx_text(c, 200, "callback");
 }
 
 /* ---- Test helpers ---- */
 
 static uint16_t next_port = 18080;
 
-static io_server_t *make_server(void)
+static ioh_server_t *make_server(void)
 {
-    io_server_config_t cfg;
-    io_server_config_init(&cfg);
+    ioh_server_config_t cfg;
+    ioh_server_config_init(&cfg);
     cfg.listen_port = next_port++;
     cfg.max_connections = 16;
     cfg.queue_depth = 32;
-    return io_server_create(&cfg);
+    return ioh_server_create(&cfg);
 }
 
 /* ---- Test 1: Simple GET ---- */
 
 void test_pipeline_simple_get(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     TEST_ASSERT_GREATER_THAN(0, listen_fd);
     uint16_t port = get_bound_port(listen_fd);
 
@@ -143,7 +143,7 @@ void test_pipeline_simple_get(void)
     TEST_ASSERT_EQUAL_INT(0, send_all(client, req, strlen(req)));
 
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -153,23 +153,23 @@ void test_pipeline_simple_get(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "Hello, World!", 13));
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 2: 404 Not Found ---- */
 
 void test_pipeline_not_found(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_get(router, "/hello", hello_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_get(router, "/hello", hello_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(listen_fd);
 
     int client = connect_to(port);
@@ -182,7 +182,7 @@ void test_pipeline_not_found(void)
     (void)send_all(client, req, strlen(req));
 
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -191,23 +191,23 @@ void test_pipeline_not_found(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "404", 3));
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 3: POST with body ---- */
 
 void test_pipeline_post_with_body(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
 
-    io_router_t *router = io_router_create();
+    ioh_router_t *router = ioh_router_create();
     TEST_ASSERT_NOT_NULL(router);
-    TEST_ASSERT_EQUAL_INT(0, io_router_post(router, "/echo", echo_handler));
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_router(srv, router));
+    TEST_ASSERT_EQUAL_INT(0, ioh_router_post(router, "/echo", echo_handler));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_router(srv, router));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(listen_fd);
 
     int client = connect_to(port);
@@ -222,7 +222,7 @@ void test_pipeline_post_with_body(void)
     (void)send_all(client, req, strlen(req));
 
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -232,19 +232,19 @@ void test_pipeline_post_with_body(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "hello", 5));
 
     close(client);
-    io_server_destroy(srv);
-    io_router_destroy(router);
+    ioh_server_destroy(srv);
+    ioh_router_destroy(router);
 }
 
 /* ---- Test 4: on_request callback ---- */
 
 void test_pipeline_on_request_callback(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, callback_handler, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, callback_handler, nullptr));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(listen_fd);
 
     int client = connect_to(port);
@@ -257,7 +257,7 @@ void test_pipeline_on_request_callback(void)
     (void)send_all(client, req, strlen(req));
 
     for (int i = 0; i < 10; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -267,18 +267,18 @@ void test_pipeline_on_request_callback(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "callback", 8));
 
     close(client);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 /* ---- Test 5: Bad request ---- */
 
 void test_pipeline_bad_request(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, callback_handler, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, callback_handler, nullptr));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(listen_fd);
 
     int client = connect_to(port);
@@ -288,7 +288,7 @@ void test_pipeline_bad_request(void)
     (void)send_all(client, req, strlen(req));
 
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
     char resp[4096];
@@ -297,37 +297,37 @@ void test_pipeline_bad_request(void)
     TEST_ASSERT_NOT_NULL(memmem(resp, (size_t)resp_len, "400", 3));
 
     close(client);
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 /* ---- Test 6: Client disconnect ---- */
 
 void test_pipeline_client_disconnect(void)
 {
-    io_server_t *srv = make_server();
+    ioh_server_t *srv = make_server();
     TEST_ASSERT_NOT_NULL(srv);
-    TEST_ASSERT_EQUAL_INT(0, io_server_set_on_request(srv, callback_handler, nullptr));
+    TEST_ASSERT_EQUAL_INT(0, ioh_server_set_on_request(srv, callback_handler, nullptr));
 
-    int listen_fd = io_server_listen(srv);
+    int listen_fd = ioh_server_listen(srv);
     uint16_t port = get_bound_port(listen_fd);
 
     int client = connect_to(port);
     TEST_ASSERT_TRUE(client >= 0);
 
     for (int i = 0; i < 3; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
-    TEST_ASSERT_EQUAL_UINT32(1, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(1, ioh_conn_pool_active(ioh_server_pool(srv)));
 
     close(client);
 
     for (int i = 0; i < 5; i++) {
-        (void)io_server_run_once(srv, 100);
+        (void)ioh_server_run_once(srv, 100);
     }
 
-    TEST_ASSERT_EQUAL_UINT32(0, io_conn_pool_active(io_server_pool(srv)));
+    TEST_ASSERT_EQUAL_UINT32(0, ioh_conn_pool_active(ioh_server_pool(srv)));
 
-    io_server_destroy(srv);
+    ioh_server_destroy(srv);
 }
 
 int main(void)

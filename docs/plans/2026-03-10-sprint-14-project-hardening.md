@@ -580,13 +580,13 @@ Add the SPDX line as the first line of every `.c` file in `src/` and every `.h` 
 List of files to modify (exclude picohttpparser):
 
 `src/`:
-- `src/core/io_buffer.c`, `src/core/io_loop.c`, `src/core/io_conn.c`, `src/core/io_ctx.c`, `src/core/io_log.c`, `src/core/io_server.c`
-- `src/tls/io_tls.c`
-- `src/http/io_http1.c`, `src/http/io_http2.c`, `src/http/io_http3.c`, `src/http/io_quic.c`, `src/http/io_request.c`, `src/http/io_response.c`, `src/http/io_proxy_proto.c`, `src/http/io_alt_svc.c`, `src/http/io_multipart.c`
-- `src/router/io_router.c`, `src/router/io_radix.c`, `src/router/io_route_group.c`, `src/router/io_route_meta.c`, `src/router/io_route_inspect.c`
-- `src/static/io_static.c`, `src/static/io_compress.c`, `src/static/io_spa.c`
-- `src/ws/io_websocket.c`, `src/ws/io_sse.c`
-- `src/middleware/io_middleware.c`, `src/middleware/io_cors.c`, `src/middleware/io_ratelimit.c`, `src/middleware/io_auth.c`, `src/middleware/io_security.c`
+- `src/core/ioh_buffer.c`, `src/core/ioh_loop.c`, `src/core/ioh_conn.c`, `src/core/ioh_ctx.c`, `src/core/ioh_log.c`, `src/core/ioh_server.c`
+- `src/tls/ioh_tls.c`
+- `src/http/ioh_http1.c`, `src/http/ioh_http2.c`, `src/http/ioh_http3.c`, `src/http/ioh_quic.c`, `src/http/ioh_request.c`, `src/http/ioh_response.c`, `src/http/ioh_proxy_proto.c`, `src/http/ioh_alt_svc.c`, `src/http/ioh_multipart.c`
+- `src/router/ioh_router.c`, `src/router/ioh_radix.c`, `src/router/ioh_route_group.c`, `src/router/ioh_route_meta.c`, `src/router/ioh_route_inspect.c`
+- `src/static/ioh_static.c`, `src/static/ioh_compress.c`, `src/static/ioh_spa.c`
+- `src/ws/ioh_websocket.c`, `src/ws/ioh_sse.c`
+- `src/middleware/ioh_middleware.c`, `src/middleware/ioh_cors.c`, `src/middleware/ioh_ratelimit.c`, `src/middleware/ioh_auth.c`, `src/middleware/ioh_security.c`
 
 `include/iohttp/`:
 - All `.h` files in `include/iohttp/`
