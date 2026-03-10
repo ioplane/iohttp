@@ -59,6 +59,15 @@ void io_response_destroy(io_response_t *resp);
 [[nodiscard]] int io_response_set_header(io_response_t *resp, const char *name, const char *value);
 
 /**
+ * @brief Add a response header (allows duplicates, e.g. Set-Cookie).
+ * @param resp  Response to modify.
+ * @param name  Header name.
+ * @param value Header value.
+ * @return 0 on success, -EINVAL on bad input, -ENOMEM on allocation failure.
+ */
+[[nodiscard]] int io_response_add_header(io_response_t *resp, const char *name, const char *value);
+
+/**
  * @brief Set the response body (copies data).
  * @param resp Response to modify.
  * @param body Body data.

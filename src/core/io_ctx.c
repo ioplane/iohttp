@@ -219,6 +219,21 @@ int io_ctx_set_header(io_ctx_t *c, const char *name, const char *value)
     return io_response_set_header(c->resp, name, value);
 }
 
+int io_ctx_set_cookie(io_ctx_t *c, const io_cookie_t *cookie)
+{
+    if (c == nullptr || c->resp == nullptr || cookie == nullptr) {
+        return -EINVAL;
+    }
+
+    char buf[512];
+    int len = io_cookie_serialize(cookie, buf, sizeof(buf));
+    if (len < 0) {
+        return len;
+    }
+
+    return io_response_add_header(c->resp, "Set-Cookie", buf);
+}
+
 int io_ctx_json(io_ctx_t *c, uint16_t status, const char *json)
 {
     if (c == nullptr || c->resp == nullptr) {

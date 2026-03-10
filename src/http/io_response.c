@@ -129,6 +129,47 @@ int io_response_set_header(io_response_t *resp, const char *name, const char *va
     return 0;
 }
 
+int io_response_add_header(io_response_t *resp, const char *name, const char *value)
+{
+    if (resp == nullptr || name == nullptr || value == nullptr) {
+        return -EINVAL;
+    }
+
+    size_t name_len = strnlen(name, IO_MAX_HEADER_SIZE);
+    size_t value_len = strnlen(value, IO_MAX_HEADER_SIZE);
+
+    /* grow if needed */
+    if (resp->header_count >= resp->header_capacity) {
+        uint32_t new_cap = resp->header_capacity * 2;
+        io_header_t *tmp = realloc(resp->headers, new_cap * sizeof(*tmp));
+        if (tmp == nullptr) {
+            return -ENOMEM;
+        }
+        resp->headers = tmp;
+        resp->header_capacity = new_cap;
+    }
+
+    char *dup_name = strndup(name, name_len);
+    if (dup_name == nullptr) {
+        return -ENOMEM;
+    }
+
+    char *dup_value = strndup(value, value_len);
+    if (dup_value == nullptr) {
+        free(dup_name);
+        return -ENOMEM;
+    }
+
+    io_header_t *hdr = &resp->headers[resp->header_count];
+    hdr->name = dup_name;
+    hdr->name_len = name_len;
+    hdr->value = dup_value;
+    hdr->value_len = value_len;
+    resp->header_count++;
+
+    return 0;
+}
+
 int io_response_set_body(io_response_t *resp, const uint8_t *body, size_t len)
 {
     if (resp == nullptr) {

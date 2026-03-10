@@ -6,6 +6,7 @@
 #ifndef IOHTTP_CORE_CTX_H
 #define IOHTTP_CORE_CTX_H
 
+#include "http/io_cookie.h"
 #include "http/io_request.h"
 #include "http/io_response.h"
 
@@ -122,6 +123,7 @@ const uint8_t *io_ctx_body(const io_ctx_t *c, size_t *len);
 
 [[nodiscard]] int io_ctx_status(io_ctx_t *c, uint16_t status);
 [[nodiscard]] int io_ctx_set_header(io_ctx_t *c, const char *name, const char *value);
+[[nodiscard]] int io_ctx_set_cookie(io_ctx_t *c, const io_cookie_t *cookie);
 [[nodiscard]] int io_ctx_json(io_ctx_t *c, uint16_t status, const char *json);
 [[nodiscard]] int io_ctx_text(io_ctx_t *c, uint16_t status, const char *text);
 [[nodiscard]] int io_ctx_html(io_ctx_t *c, uint16_t status, const char *html);
