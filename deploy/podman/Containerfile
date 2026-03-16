@@ -100,6 +100,11 @@ RUN dnf install -y \
     brotli-devel \
     lz4-devel \
     openssl-devel \
+    expat-devel \
+    readline-devel \
+    elfutils-devel \
+    ncurses-devel \
+    python3-devel \
     && dnf clean all
 
 # Install code quality and documentation tools
