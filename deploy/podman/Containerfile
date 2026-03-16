@@ -16,6 +16,9 @@ ARG NGTCP2_VERSION=1.21.0
 ARG NGHTTP3_VERSION=1.15.0
 ARG WSLAY_VERSION=1.1.1
 ARG SFPARSE_COMMIT=HEAD
+ARG CCACHE_VERSION=4.11.3
+ARG LCOV_VERSION=2.3
+ARG HYPERFINE_VERSION=1.19.0
 
 # Enable CodeReady Builder repo (for -devel packages not in baseos/appstream)
 RUN dnf install -y oraclelinux-developer-release-el10 && \
@@ -38,6 +41,7 @@ RUN dnf install -y \
     strace \
     wget \
     curl \
+    jq \
     tar \
     xz \
     bzip2 \
@@ -64,8 +68,12 @@ RUN cd /tmp && \
                 llvm-ar llvm-nm llvm-objdump llvm-ranlib llvm-strip \
                 llvm-symbolizer llvm-profdata llvm-cov llvm-objcopy \
                 llvm-readelf llvm-size llvm-strings llvm-addr2line \
+                diagtool \
                 scan-build scan-view; do \
         [ -e "$LLVM_DIR/bin/$tool" ] && cp -a "$LLVM_DIR/bin/$tool" /usr/local/bin/; \
+    done && \
+    for tool in run-clang-tidy.py clang-tidy-diff.py; do \
+        [ -e "$LLVM_DIR/share/clang/$tool" ] && cp -a "$LLVM_DIR/share/clang/$tool" /usr/local/bin/; \
     done && \
     cp -a $LLVM_DIR/lib/clang /usr/local/lib/ && \
     rm -rf /tmp/LLVM-* /tmp/llvm.tar.xz && \
@@ -323,6 +331,76 @@ RUN cd /tmp && \
     cd /tmp && rm -rf mold
 
 # ═══════════════════════════════════════════════════════
+# Profilers and Debuggers
+# ═══════════════════════════════════════════════════════
+
+ARG UFTRACE_VERSION=0.19
+ARG FTRACER_COMMIT=d24de224088c3f98333166a51d2c95815ba49829
+
+# Build uftrace from source
+RUN cd /tmp && \
+    wget https://github.com/namhyung/uftrace/archive/refs/tags/v${UFTRACE_VERSION}.tar.gz && \
+    tar xzf v${UFTRACE_VERSION}.tar.gz && \
+    cd uftrace-${UFTRACE_VERSION} && \
+    ./configure --prefix=/usr/local && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf uftrace-* v${UFTRACE_VERSION}.tar.gz
+
+# Build ftracer helper stack
+RUN cd /tmp && \
+    git clone https://github.com/andikleen/ftracer.git && \
+    cd ftracer && \
+    git checkout ${FTRACER_COMMIT} && \
+    make -j$(nproc) ftracer.o && \
+    install -d /usr/local/lib/ftracer /usr/local/libexec/ftracer /usr/local/include && \
+    install -m 644 ftracer.o /usr/local/lib/ftracer/ftracer.o && \
+    install -m 644 ftracer.h /usr/local/include/ftracer.h && \
+    install -m 755 ftracer-gdb.py /usr/local/libexec/ftracer/ftracer-gdb.py && \
+    install -m 755 fresolve /usr/local/bin/fresolve && \
+    install -m 755 frun /usr/local/bin/frun && \
+    install -m 755 strip-log /usr/local/libexec/ftracer/strip-log && \
+    cd /tmp && rm -rf ftracer
+
+# ═══════════════════════════════════════════════════════
+# Build Acceleration
+# ═══════════════════════════════════════════════════════
+
+# Build ccache from source (not in OL10 repos)
+RUN cd /tmp && \
+    wget https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/ccache-${CCACHE_VERSION}.tar.gz && \
+    tar xzf ccache-${CCACHE_VERSION}.tar.gz && \
+    cd ccache-${CCACHE_VERSION} && \
+    mkdir build && cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DREDIS_STORAGE_BACKEND=OFF && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf ccache-*
+
+# Configure ccache defaults
+RUN mkdir -p /root/.config/ccache && \
+    printf "max_size = 2G\ncompression = true\ncompression_level = 6\n" \
+        > /root/.config/ccache/ccache.conf
+
+# Build lcov from source (Perl-based, not in OL10 repos)
+RUN cd /tmp && \
+    wget https://github.com/linux-test-project/lcov/releases/download/v${LCOV_VERSION}/lcov-${LCOV_VERSION}.tar.gz && \
+    tar xzf lcov-${LCOV_VERSION}.tar.gz && \
+    cd lcov-${LCOV_VERSION} && \
+    make install PREFIX=/usr/local && \
+    cd /tmp && rm -rf lcov-*
+
+# Install hyperfine (pre-built binary)
+RUN cd /tmp && \
+    wget https://github.com/sharkdp/hyperfine/releases/download/v${HYPERFINE_VERSION}/hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-gnu.tar.gz && \
+    tar xzf hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-gnu.tar.gz && \
+    install -m 755 hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-gnu/hyperfine /usr/local/bin/hyperfine && \
+    cd /tmp && rm -rf hyperfine-*
+
+# ═══════════════════════════════════════════════════════
 # Static Analysis
 # ═══════════════════════════════════════════════════════
 
@@ -337,5 +415,7 @@ RUN pip3 install codechecker && \
 
 # Update ldconfig cache
 RUN ldconfig
+
+WORKDIR /workspace
 
 CMD ["/bin/bash"]
