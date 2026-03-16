@@ -1,3 +1,8 @@
-# Force GitHub linguist to classify all code as C (not C++)
-*.h linguist-language=C
-*.c linguist-language=C
+* text=auto eol=lf
+*.c text diff=c
+*.h text diff=c
+*.md text
+*.sh text eol=lf
+*.py text eol=lf diff=python
+*.yml text eol=lf
+*.yaml text eol=lf
