@@ -1,0 +1,31 @@
+name: Release Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build dev image
+        run: docker build -t iohttp-dev:ci -f deploy/podman/Containerfile .
+
+      - name: Run quality pipeline
+        run: |
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            iohttp-dev:ci \
+            bash scripts/quality.sh

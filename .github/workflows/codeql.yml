@@ -1,0 +1,36 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+
+      - name: Build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liburing-dev libssl-dev zlib1g-dev libbrotli-dev
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DIOHTTP_BUILD_TESTS=OFF
+          cmake --build build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
