@@ -385,6 +385,10 @@ RUN mkdir -p /root/.config/ccache && \
     printf "max_size = 2G\ncompression = true\ncompression_level = 6\n" \
         > /root/.config/ccache/ccache.conf
 
+# lcov Perl dependencies (not in OL10 repos as RPM — install via CPAN + dnf)
+RUN dnf install -y perl-Time-HiRes perl-Digest-MD5 perl-JSON perl-CPAN && dnf clean all && \
+    cpan -T Capture::Tiny DateTime
+
 # Build lcov from source (Perl-based, not in OL10 repos)
 RUN cd /tmp && \
     wget https://github.com/linux-test-project/lcov/releases/download/v${LCOV_VERSION}/lcov-${LCOV_VERSION}.tar.gz && \
