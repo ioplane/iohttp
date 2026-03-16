@@ -25,7 +25,7 @@ cmake --build --preset clang-debug --target docs      # Doxygen
 
 ## Dev Container
 
-- **Image**: `localhost/ringwall-dev:latest` (OL10-based, shared with ringwall project)
+- **Image**: `localhost/iohttp-dev:latest` (OL10-based, built from `deploy/podman/Containerfile`)
 - **MUST run with**: `--security-opt seccomp=unconfined` (io_uring_setup needs it)
 - **Compilers**: Clang 22.1.0 (primary), GCC 15.1.1 (gcc-toolset-15, validation)
 - **System GCC**: 14.3.1 (OL10 default, used by some library builds)
@@ -43,7 +43,13 @@ cmake --build --preset clang-debug --target docs      # Doxygen
 - **GCC 15+**: Validation & release (LTO, -fanalyzer, unique warnings)
 - **Debug linker**: mold (instant linking)
 - **Release linker**: GNU ld (GCC LTO) or lld (Clang ThinLTO)
-- Always use `-std=c23` explicitly for both compilers
+- Always use `-std=c23` explicitly — GCC defaults to gnu23, Clang to gnu17
+- **NEVER use `-ffast-math`** in crypto/security code (can create timing side-channels)
+- Use `restrict` on non-overlapping pointer params in hot functions (biggest vectorization win)
+- GCC and Clang FMV/LTO objects are **binary-incompatible** — never mix in one binary
+- For vectorization-sensitive work, collect both:
+  - Clang: `-Rpass=loop-vectorize -Rpass-missed=loop-vectorize -Rpass-analysis=loop-vectorize`
+  - GCC: `-fopt-info-vec-all`
 
 ## Key Directories
 
@@ -144,12 +150,38 @@ wolfSSL is dual-licensed: GPLv2+ (open source) or commercial. GPLv2-or-later is 
 - Fuzzing: LibFuzzer targets in `tests/fuzz/` (Clang only)
 - Coverage target: >= 80%
 
+## Profiling Toolchain
+
+The development image carries profiling/debug tools for hot-path work:
+- `gdb` — C23 DWARF5 debugging
+- `valgrind` — callgrind profiling, memcheck
+- `uftrace` — function-level tracing for event loop profiling
+- `hyperfine` — repeatable benchmark comparisons
+- `ftracer` helpers (`frun`, `fresolve`, `/usr/local/lib/ftracer/ftracer.o`)
+
+## Required Host Utilities
+
+Keep these available on the host for effective agent and contributor workflows:
+- `git`
+- `gh` with working `gh api graphql` authentication
+- `rg` (`ripgrep`)
+- `jq`
+- `python3`
+- `podman`
+
+Strongly recommended:
+- `uv` / `uvx`
+- `clangd`
+- `fd`
+- `yq`
+- `hyperfine`
+
 ## Post-Sprint Quality Pipeline (MANDATORY)
 
 After completing each sprint, run the **full quality pipeline** inside the container before considering the sprint done. Single command:
 
 ```bash
-# Full pipeline (6 stages: build → tests → format → cppcheck → PVS-Studio → CodeChecker)
+# Full pipeline (11 stages: baseline → stale-scan → docs → scripts → gcc → build → tests → format → cppcheck → PVS-Studio → CodeChecker)
 podman run --rm --security-opt seccomp=unconfined \
   -v /opt/projects/repositories/iohttp:/workspace:Z \
   localhost/iohttp-dev:latest bash -c "cd /workspace && ./scripts/quality.sh"
@@ -169,6 +201,38 @@ cmake --build --preset clang-debug --target format-check     # clang-format
 - Pre-existing findings in other files: track but don't block sprint
 - PVS-Studio license: loaded from `.env` file (`PVS_NAME` / `PVS_KEY`), NEVER commit credentials
 - `.env` is in `.gitignore`, `.env.example` shows required variables
+
+## Documentation Style
+
+Write English documentation first. Treat `docs/en/*` as authoritative and `docs/ru/*` as the translation/adaptation layer.
+
+Documentation must use strict technical language:
+- write facts, contracts, limits, ownership rules, and examples
+- do not write narrative introductions, philosophy sections, or marketing text
+- use Mermaid for diagrams
+- use badges in every stable document
+- Russian documentation must use Russian prose; keep English only for API identifiers, macro names, external project names, protocol names, and RFC identifiers
+
+Keep the stable structure aligned with other `io*` projects:
+- `docs/README.md`, `docs/en/README.md`, `docs/ru/README.md`
+- `docs/plans/README.md`, `docs/plans/ROADMAP.md`, `docs/plans/BACKLOG.md`
+- `docs/tmp/` is non-authoritative scratch space
+
+## Changelog And Versioning
+
+Maintain [CHANGELOG.md](CHANGELOG.md) for every merge that changes behavior, public API, verification evidence, release automation, or published documentation.
+
+Rules:
+- Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
+- Keep `Unreleased` at the top.
+- Standard sections: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- Write short factual bullets. Record externally visible changes only.
+- Update in the same branch as the code change.
+
+Versioning:
+- Semantic Versioning with leading `v`.
+- `v0.y.z` for pre-1.0, `v0.y.z-rc.N` for release candidates.
+- First release: `v0.1.0`.
 
 ## Architecture Decisions (DO NOT CHANGE)
 
@@ -296,6 +360,12 @@ See `.claude/skills/` for detailed guidance on:
 - **`io-uring-patterns/`** — SQE/CQE patterns, provided buffers, multishot, linked timeouts, zero-copy, error handling, send serialization, fd lifecycle, backpressure, anti-patterns, library integration (MANDATORY for src/core/, src/net/)
 - **`wolfssl-iohttp/`** — wolfSSL I/O callbacks, non-blocking TLS, ALPN/SNI, mTLS, QUIC crypto, I/O serialization (MANDATORY for src/tls/)
 - **`rfc-reference/`** — RFC index with key sections, priority map, protocol implementation notes
+- **`modern-c23/`** — C23 best practices, mandatory features, patterns, anti-patterns (MANDATORY for all C code)
+- **`iohttp-documentation-style/`** — Documentation writing rules, Mermaid, badges, changelog
+- **`iohttp-release-management/`** — Release workflow, versioning, changelog, quality gate
+- **`iohttp-repository-conventions/`** — Repository structure, file layout, io* alignment
+
+Roadmap: `.claude/skills/ROADMAP.md`
 
 ## MCP Documentation (context7)
 
