@@ -25,7 +25,9 @@ cmake --build --preset clang-debug --target docs      # Doxygen
 
 ## Dev Container
 
-- **Image**: `localhost/iohttp-dev:latest` (OL10-based, built from `deploy/podman/Containerfile`)
+- Base image: `podman build -t ioplane-base:latest -f /opt/projects/repositories/container-images/tools/ioplane-base/Containerfile .`
+- All `io*` projects share `localhost/ioplane-base:latest` as the common toolchain layer.
+- **Image**: `localhost/iohttp-dev:latest` (built from `deploy/podman/Containerfile`)
 - **MUST run with**: `--security-opt seccomp=unconfined` (io_uring_setup needs it)
 - **Compilers**: Clang 22.1.0 (primary), GCC 15.1.1 (gcc-toolset-15, validation)
 - **System GCC**: 14.3.1 (OL10 default, used by some library builds)
