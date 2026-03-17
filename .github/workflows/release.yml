@@ -1,0 +1,56 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build dev image
+        run: docker build -t iohttp-dev:release -f deploy/podman/Containerfile .
+
+      - name: Run release gate
+        run: |
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            iohttp-dev:release \
+            bash scripts/run-release-gate.sh
+
+      - name: Build release assets
+        run: |
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            iohttp-dev:release \
+            bash scripts/build-release-assets.sh "${GITHUB_REF_NAME}"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets-${{ github.ref_name }}
+          path: dist/
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/* \
+            --title "iohttp ${GITHUB_REF_NAME}" \
+            --notes-file dist/RELEASE_NOTES.md
