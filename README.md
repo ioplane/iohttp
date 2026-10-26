@@ -139,6 +139,8 @@ stateDiagram-v2
 | 8446 | TLS 1.3 | Implemented |
 | 6455 | WebSocket | Implemented |
 
+Current development plan: [iohttp agent development plan, 2026-10-26](docs/plans/2026-10-26-iohttp-agent-development-plan.md).
+
 ## Documentation
 
 | # | Document | Description |
